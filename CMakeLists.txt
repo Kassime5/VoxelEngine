@@ -23,7 +23,9 @@ add_subdirectory(thirdparty/glm)
 add_executable(GLFWVoxel main.cpp
         src/Shader.cpp
         src/Shader.h
-        src/stb_image.h)
+        src/stb_image.h
+        src/Camera.cpp
+        src/Camera.h)
 
 # Remove shader folder before copying
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/shader" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
