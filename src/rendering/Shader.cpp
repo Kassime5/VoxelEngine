@@ -1,4 +1,4 @@
-﻿#include "Shader.h"
+﻿#include "./Shader.h"
 
 #include "glm/gtc/type_ptr.inl"
 
@@ -68,6 +68,14 @@ void Shader::setFloat(const std::string &name, float value) const {
 
 void Shader::setMat4(const std::string &name, const glm::mat4 &value) const {
     glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
+}
+
+void Shader::setMat3(const std::string &name, const glm::mat3 &value) const {
+    glUniformMatrix3fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
+}
+
+void Shader::setVec3(const std::string &name, glm::vec3 value) const {
+    glUniform3f(glGetUniformLocation(ID, name.c_str()), value[0], value[1], value[2]);
 }
 
 void Shader::setBool(const std::string &name, bool value) const {

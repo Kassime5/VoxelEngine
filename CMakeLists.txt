@@ -20,27 +20,52 @@ target_include_directories(glad PUBLIC thirdparty/glad/include)
 # GLM
 add_subdirectory(thirdparty/glm)
 
-add_executable(GLFWVoxel main.cpp
-        src/Shader.cpp
-        src/Shader.h
-        src/stb_image.h
-        src/Camera.cpp
-        src/Camera.h)
+# ImGui
+add_library(imgui
+        thirdparty/imgui/imgui.cpp
+        thirdparty/imgui/imgui_draw.cpp
+        thirdparty/imgui/imgui_widgets.cpp
+        thirdparty/imgui/imgui_tables.cpp
+        thirdparty/imgui/backends/imgui_impl_glfw.cpp
+        thirdparty/imgui/backends/imgui_impl_opengl3.cpp
+)
 
-# Remove shader folder before copying
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/shader" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/textures" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+add_executable(GLFWVoxel main.cpp
+        src/rendering/Shader.cpp
+        src/rendering/Shader.h
+        src/stb_image.h
+        src/rendering/Camera.cpp
+        src/rendering/Camera.h
+        src/world/block.h
+        src/rendering/Texture.cpp
+        src/rendering/Texture.h
+        src/rendering/Mesh.cpp
+        src/rendering/Mesh.h
+        src/world/Chunk.cpp
+        src/world/Chunk.h
+        src/world/World.cpp
+        src/world/World.h
+        src/rendering/TextureAltas.cpp
+        src/rendering/TextureAltas.h
+        src/core/Window.cpp
+        src/core/Window.h)
+
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
+target_include_directories(imgui PUBLIC
+        thirdparty/imgui
+        thirdparty/imgui/backends
+)
 
 target_link_libraries(GLFWVoxel PRIVATE
         glfw
         glad
         OpenGL::GL
         glm::glm
+        imgui
 )
 
-target_include_directories(GLFWVoxel PRIVATE thirdparty)
+target_link_libraries(imgui PUBLIC glfw glad)
 
-## Optional: GLM include
-#target_include_directories(GLFWVoxel PRIVATE
-#        thirdparty/glm
-#)
+
+target_include_directories(GLFWVoxel PRIVATE thirdparty)

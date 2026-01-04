@@ -2,10 +2,11 @@
 // Created by maxim on 01/01/2026.
 //
 
-#include "Camera.h"
+#include "./Camera.h"
 
-void Camera::ProcessKeyboard(Camera_Movement direction, float deltaTime) {
+void Camera::ProcessKeyboard(Camera_Movement direction, bool sprinting, float deltaTime) {
     float velocity = MovementSpeed * deltaTime;
+    velocity = sprinting ? velocity * 5 : velocity;
     if (direction == FORWARD)
         Position += Front * velocity;
     if (direction == BACKWARD)
