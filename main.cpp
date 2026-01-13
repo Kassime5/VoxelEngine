@@ -21,12 +21,12 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 // Window Settings
 const unsigned int SCR_WIDTH = 1920;
 const unsigned int SCR_HEIGHT = 1080;
-bool vsync = false;
+bool vsync = true;
 
 // Engine variables
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
-int renderDistance = 12;
+int renderDistance = 8;
 
 bool wireframe = false;
 
@@ -140,6 +140,7 @@ int main() {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         // ---
 
+        // TODO: Change this part
         world.setRenderDistance(renderDistance);
 
         glfwSwapBuffers(*window);
@@ -195,7 +196,7 @@ void processInput(GLFWwindow *window, World *world) {
     }
 
     if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
-        std::cout << camera.Position.x << camera.Position.y << camera.Position.z << std::endl;
+        std::cout << camera.Position.x << "-" << camera.Position.y << "-" << camera.Position.z << std::endl;
         BlockType type = world->getBlock(camera.Position.x, camera.Position.y, camera.Position.z);
         std::cout << printBlockType(type) << std::endl;
     }

@@ -9,14 +9,15 @@
 #include "../rendering/Mesh.h"
 #include "../rendering/TextureAltas.h"
 #include "Block.h"
+#include "PerlinNoise/PerlinNoise.hpp"
 
 class TextureAtlas;
 class World;
 
 class Chunk {
 public:
-    static constexpr int SIZE = 16;
-    static constexpr int HEIGHT = 256;
+    static constexpr int SIZE = 64;
+    static constexpr int HEIGHT = 196;
 
     Chunk(const glm::ivec3& position);
     ~Chunk() = default;
@@ -24,7 +25,7 @@ public:
     BlockType getBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockType type);
 
-    void generate();
+    void generate(const siv::PerlinNoise* perlinNoise = nullptr);
     void generateMesh(const TextureAtlas* atlas = nullptr, const World* world = nullptr);
     void draw() const;
 

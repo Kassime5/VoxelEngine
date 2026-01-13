@@ -88,16 +88,16 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
     m_isDirty = true;
 }
 
-void Chunk::generate() {
-    // TODO: Change world gen
+void Chunk::generate(const siv::PerlinNoise* perlinNoise) {
     for (int x = 0; x < SIZE; x++) {
         for (int z = 0; z < SIZE; z++) {
-            // Calculate world position
             int worldX = m_position.x * SIZE + x;
             int worldZ = m_position.z * SIZE + z;
 
-            //+ 8.0f * sin(worldX * 0.1f) * cos(worldZ * 0.1f)
-            float height = 32.0f + 8.0f * sin(worldX * 0.1f) * cos(worldZ * 0.1f);
+            float height;
+            double noise = perlinNoise->octave2D_01(worldX * 0.01, worldZ * 0.01, 4);
+            height = 16.0f + static_cast<float>(noise) * 128.0f;
+
             int terrainHeight = static_cast<int>(height);
 
             for (int y = 0; y < HEIGHT; y++) {
@@ -107,8 +107,6 @@ void Chunk::generate() {
                     m_blocks[x][y][z] = BlockType::Dirt;
                 } else if (y < terrainHeight) {
                     m_blocks[x][y][z] = BlockType::Grass;
-                } else {
-                    m_blocks[x][y][z] = BlockType::Air;
                 }
             }
         }

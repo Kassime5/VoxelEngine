@@ -8,7 +8,7 @@
 #include <cmath>
 
 World::World()
-    : m_renderDistance(8), m_lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX) {
+    : m_renderDistance(8), m_lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX), seed(1010){
 }
 
 bool World::loadTextureAtlas(const char* atlasPath, int tilesPerRow) {
@@ -135,7 +135,7 @@ void World::loadChunksAroundPosition(const glm::ivec3& centerChunkPos) {
 
             if (!isChunkLoaded(chunkPos)) {
                 auto chunk = std::make_unique<Chunk>(chunkPos);
-                chunk->generate();
+                chunk->generate(&perlinNoise);
                 m_chunks[chunkPos] = std::move(chunk);
 
                 // Mark existing neighbors as dirty too
@@ -190,14 +190,13 @@ void World::unloadDistantChunks(const glm::ivec3& centerChunkPos) {
 
 Chunk* World::createChunk(const glm::ivec3& chunkPos) {
     auto chunk = std::make_unique<Chunk>(chunkPos);
-    chunk->generate();
+    chunk->generate(&perlinNoise);  // Pass the noise generator
 
     Chunk* ptr = chunk.get();
     m_chunks[chunkPos] = std::move(chunk);
 
     ptr->generateMesh(&m_textureAtlas, this);
 
-    // Mark neighbors dirty...
     const glm::ivec3 neighbors[] = {
         {-1, 0, 0}, {1, 0, 0},
         {0, 0, -1}, {0, 0, 1}

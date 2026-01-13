@@ -13,6 +13,7 @@
 #include <memory>
 #include <vector>
 #include <glm/glm.hpp>
+#include "PerlinNoise/PerlinNoise.hpp"
 
 struct IVec3Hash {
     std::size_t operator()(const glm::ivec3& v) const {
@@ -56,6 +57,10 @@ private:
 
     Chunk* createChunk(const glm::ivec3& chunkPos);
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
+
+    // Noise
+    const siv::PerlinNoise::seed_type seed;
+    const siv::PerlinNoise perlinNoise {seed};
 };
 
 #endif //GLFWVOXEL_WORLD_H
