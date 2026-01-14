@@ -31,7 +31,7 @@ int renderDistance = 8;
 bool wireframe = false;
 
 // Camera variables
-Camera camera(glm::vec3(0.0f, 50.0f, 0.0f));
+Camera camera(glm::vec3(0.0f, 100.0f, 0.0f));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -70,10 +70,10 @@ int main() {
 
 
     // Create world and load texture atlas
-    World world;
-    world.setRenderDistance(renderDistance);
+    World* world = new World();
+    world->setRenderDistance(renderDistance);
 
-    if (!world.loadTextureAtlas("assets/textures/atlas.png", 8)) {
+    if (!world->loadTextureAtlas("assets/textures/atlas.png", 8)) {
         std::cerr << "Failed to load texture atlas!" << std::endl;
         return -1;
     }
@@ -101,17 +101,25 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(*window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
 
+    int frameCount = 0;
+
     while (!glfwWindowShouldClose(*window)) {
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+        frameCount++;
 
-        processInput(*window, &world);
+        if (frameCount % 100 == 0){
+            Profiler::getInstance().printStats();
+            // world->printDebugInfo();
+        }
+
+        processInput(*window, world);
 
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        world.update(camera.Position);
+        world->update(camera.Position);
         ourShader.use();
 
         ourShader.setVec3("viewPos", camera.Position);
@@ -123,7 +131,7 @@ int main() {
         glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("view", view);
 
-        world.render(ourShader);
+        world->render(ourShader);
 
 
         // ImGUI Rendering
@@ -141,7 +149,7 @@ int main() {
         // ---
 
         // TODO: Change this part
-        world.setRenderDistance(renderDistance);
+        world->setRenderDistance(renderDistance);
 
         glfwSwapBuffers(*window);
         glfwPollEvents();
@@ -153,6 +161,10 @@ int main() {
 
     // glfw: terminate, clearing all previously allocated GLFW resources.
     glfwTerminate();
+
+    delete window;
+    delete world;
+
     return 0;
 }
 

@@ -48,7 +48,8 @@ add_executable(GLFWVoxel main.cpp
         src/rendering/TextureAltas.cpp
         src/rendering/TextureAltas.h
         src/core/Window.cpp
-        src/core/Window.h)
+        src/core/Window.h
+        src/rendering/Profiler.h)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 

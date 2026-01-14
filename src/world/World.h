@@ -12,8 +12,14 @@
 #include <unordered_map>
 #include <memory>
 #include <vector>
+#include <queue>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 #include <glm/glm.hpp>
 #include "PerlinNoise/PerlinNoise.hpp"
+#include "../rendering/Profiler.h"
 
 struct IVec3Hash {
     std::size_t operator()(const glm::ivec3& v) const {
@@ -24,16 +30,26 @@ struct IVec3Hash {
     }
 };
 
+struct ChunkGenerationTask {
+    glm::ivec3 chunkPos;
+    Chunk* chunk;
+};
+
+struct ChunkMeshTask {
+    Chunk* chunk;
+    MeshData meshData;
+};
+
 class World {
 public:
     World();
-    ~World() = default;
+    ~World();
 
     bool loadTextureAtlas(const char* atlasPath, int tilesPerRow = 16);
     void update(const glm::vec3& cameraPosition);
     void render(Shader& shader);
 
-    BlockType getBlock(int worldX, int worldY, int worldZ) const;
+    BlockType getBlock(int worldX, int worldY, int worldZ);
     void setBlock(int worldX, int worldY, int worldZ, BlockType type);
 
     Chunk* getChunk(const glm::ivec3& chunkPos);
@@ -42,6 +58,7 @@ public:
     void setRenderDistance(int distance) { m_renderDistance = distance; }
     int getRenderDistance() const { return m_renderDistance; }
     int getLoadedChunkCount() const { return m_chunks.size(); }
+    void printDebugInfo() const;
 
 private:
     std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash> m_chunks;
@@ -49,18 +66,42 @@ private:
     int m_renderDistance;
     glm::ivec3 m_lastCameraChunkPos;
 
+    // Thread pool
+    std::vector<std::thread> m_generationThreads;
+    std::queue<ChunkGenerationTask> m_generationQueue;
+    std::mutex m_generationQueueMutex;
+    std::condition_variable m_generationQueueCV;
+
+    // Thread pool for mesh building
+    std::vector<std::thread> m_meshBuildThreads;
+    std::queue<ChunkMeshTask> m_meshBuildQueue;
+    std::mutex m_meshBuildQueueMutex;
+    std::condition_variable m_meshBuildQueueCV;
+
+    // GPU upload queue (processed on main thread)
+    std::queue<ChunkMeshTask> m_gpuUploadQueue;
+    std::mutex m_gpuUploadQueueMutex;
+
+    std::atomic<bool> m_stopThreads;
+
+    void initThreadPool(int generationThreads, int meshThreads);
+    void shutdownThreadPool();
+    void generationWorkerThread();
+    void meshBuildWorkerThread();
+    void processGPUUploadQueue(int maxPerFrame);
+
+    // Noise
+    const siv::PerlinNoise::seed_type seed;
+    const siv::PerlinNoise perlinNoise;
+
     glm::ivec3 worldToChunkPos(int worldX, int worldY, int worldZ) const;
     glm::ivec3 worldToLocalPos(int worldX, int worldY, int worldZ) const;
 
     void loadChunksAroundPosition(const glm::ivec3& centerChunkPos);
     void unloadDistantChunks(const glm::ivec3& centerChunkPos);
 
-    Chunk* createChunk(const glm::ivec3& chunkPos);
+    // Chunk* createChunk(const glm::ivec3& chunkPos);
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
-
-    // Noise
-    const siv::PerlinNoise::seed_type seed;
-    const siv::PerlinNoise perlinNoise {seed};
 };
 
 #endif //GLFWVOXEL_WORLD_H
