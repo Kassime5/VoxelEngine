@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
+#include "src/debug/RenderStats.h"
 
 World::World()
     : m_renderDistance(8), m_lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
@@ -174,6 +175,7 @@ void World::render(Shader& shader) {
         Chunk* chunk = pair.second.get();
 
         if (chunk->getState() != ChunkState::Ready) {
+            RenderStats::getInstance().addChunkSkipped();
             continue;
         }
 
@@ -183,6 +185,7 @@ void World::render(Shader& shader) {
         shader.setMat4("model", model);
 
         chunk->draw();
+        RenderStats::getInstance().addChunkRendered();
     }
 }
 

@@ -3,6 +3,7 @@
 //
 
 #include "Chunk.h"
+#include <cstring>
 #include "World.h"
 
 // position (x, y, z), texCoords (u, v)
@@ -63,10 +64,10 @@ static const int FACE_NORMALS[6][3] = {
 
 Chunk::Chunk(const glm::ivec3 &position)
     : m_position(position), m_isDirty(true), m_state(ChunkState::Empty) {
-    for (int x = 0; x < SIZE; x++) {
-        for (int y = 0; y < HEIGHT; y++) {
-            for (int z = 0; z < SIZE; z++) {
-                m_blocks[x][y][z] = BlockType::Air;
+    for (auto & m_block : m_blocks) {
+        for (auto & y : m_block) {
+            for (auto & z : y) {
+                z = BlockType::Air;
             }
         }
     }
@@ -76,7 +77,7 @@ BlockType Chunk::getBlock(int x, int y, int z) const {
     if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) {
         return BlockType::Air;
     }
-    // std::lock_guard<std::mutex> lock(m_blocksMutex);
+    std::lock_guard<std::mutex> lock(m_blocksMutex);
     return m_blocks[x][y][z];
 }
 
@@ -84,7 +85,7 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
     if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) {
         return;
     }
-    // std::lock_guard<std::mutex> lock(m_blocksMutex);
+    std::lock_guard<std::mutex> lock(m_blocksMutex);
     m_blocks[x][y][z] = type;
     m_isDirty = true;
 }
@@ -97,7 +98,7 @@ void Chunk::generate(const siv::PerlinNoise* perlinNoise) {
             int worldZ = m_position.z * SIZE + z;
 
             double noise = perlinNoise->octave2D_01(worldX * 0.01, worldZ * 0.01, 4);
-            float height = 16.0f + static_cast<float>(noise) * 128.0f;
+            float height = 16.0f + static_cast<float>(noise) * 32.0f;
             int terrainHeight = static_cast<int>(height);
 
             for (int y = 0; y < HEIGHT; y++) {
@@ -122,8 +123,6 @@ void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *
     meshData.vertices.reserve(SIZE * SIZE * 4);
     meshData.indices.reserve(SIZE * SIZE * 6);
 
-    // std::lock_guard<std::mutex> lock(m_blocksMutex);
-
     for (int x = 0; x < SIZE; x++) {
         for (int y = 0; y < HEIGHT; y++) {
             for (int z = 0; z < SIZE; z++) {
@@ -144,6 +143,8 @@ void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *
             }
         }
     }
+
+    m_state.store(ChunkState::MeshBuilt);
 }
 
 void Chunk::uploadMeshToGPU(const MeshData& meshData) {
@@ -175,7 +176,7 @@ bool Chunk::shouldRenderFace(int x, int y, int z, int nx, int ny, int nz, World 
         return !isBlockOpaque(m_blocks[neighborX][neighborY][neighborZ]);
     }
 
-    // TODO: Currently doesn't work if the chunk is still ge
+    // TODO: Currently doesn't work if the chunk is still generating
     if (world) {
         int worldX = m_position.x * SIZE + neighborX;
         int worldY = neighborY;

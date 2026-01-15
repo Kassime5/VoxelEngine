@@ -42,7 +42,7 @@ struct MeshData {
 class Chunk {
 public:
     static constexpr int SIZE = 64;
-    static constexpr int HEIGHT = 196;
+    static constexpr int HEIGHT = 256;
 
     Chunk(const glm::ivec3& position);
     ~Chunk() = default;

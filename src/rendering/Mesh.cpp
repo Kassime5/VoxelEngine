@@ -4,6 +4,7 @@
 
 
 #include "Mesh.h"
+#include "src/debug/RenderStats.h"
 
 Mesh::Mesh() : VAO(0), VBO(0), EBO(0), initialized(false) {}
 
@@ -104,6 +105,11 @@ void Mesh::draw() const {
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+
+    // Track rendering stats
+    RenderStats::getInstance().addDrawCall();
+    RenderStats::getInstance().addTriangles(indices.size() / 3);
+    RenderStats::getInstance().addVertices(vertices.size());
 }
 
 void Mesh::cleanup() {
@@ -114,4 +120,12 @@ void Mesh::cleanup() {
         VAO = VBO = EBO = 0;
         initialized = false;
     }
+}
+
+int Mesh::getVertexCount() const {
+    return vertices.size();
+}
+
+int Mesh::getTriangleCount() const {
+    return indices.size() / 3;
 }

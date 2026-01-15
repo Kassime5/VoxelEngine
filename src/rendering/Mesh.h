@@ -37,6 +37,9 @@ public:
 
     bool isEmpty() const { return vertices.empty(); }
 
+    int getVertexCount() const;
+    int getTriangleCount() const;
+
 private:
     unsigned int VAO, VBO, EBO;
     bool initialized;
