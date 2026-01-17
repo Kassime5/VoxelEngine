@@ -53,7 +53,9 @@ add_executable(GLFWVoxel main.cpp
         src/debug/RenderStats.h
         src/debug/GPUStats.h
         src/rendering/Skybox.cpp
-        src/rendering/Skybox.h)
+        src/rendering/Skybox.h
+        src/rendering/ShaderManager.cpp
+        src/rendering/ShaderManager.h)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 

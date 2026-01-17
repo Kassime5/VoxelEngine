@@ -6,6 +6,8 @@
 #include "../stb_image.h"
 #include <iostream>
 
+#include "ShaderManager.h"
+
 static const float skyboxVertices[] = {
     // positions
     -1.0f,  1.0f, -1.0f,
@@ -51,10 +53,9 @@ static const float skyboxVertices[] = {
      1.0f, -1.0f,  1.0f
 };
 
-Skybox::Skybox()
-    : VAO(0), VBO(0), textureID(0),
-      shader("assets/shader/skybox/skybox_vertex.shader",
-               "assets/shader/skybox/skybox_fragment.shader") {
+const char* Skybox::SHADER_NAME = "skybox";
+
+Skybox::Skybox() : VAO(0), VBO(0), textureID(0) {
     setupMesh();
 }
 
@@ -113,12 +114,23 @@ unsigned int Skybox::loadCubemap(const std::vector<std::string>& faces) {
 }
 
 void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
-    // Draw skybox last, with depth test but write disabled
     glDepthFunc(GL_LEQUAL);
 
-    shader.use();
-    shader.setMat4("view", view);
-    shader.setMat4("projection", projection);
+    Shader* skyboxShader = ShaderManager::getInstance().getShader(SHADER_NAME);
+
+    if (!skyboxShader) {
+        std::cerr << "Failed to get skybox shader!" << std::endl;
+        glDepthFunc(GL_LESS);
+        return;
+    }
+
+    skyboxShader->use();
+
+    glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
+
+    skyboxShader->setMat4("view", skyboxView);
+    skyboxShader->setMat4("projection", projection);
+    skyboxShader->setInt("skybox", 0);  // Set texture unit
 
     glBindVertexArray(VAO);
     glActiveTexture(GL_TEXTURE0);
@@ -126,5 +138,5 @@ void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
 
-    glDepthFunc(GL_LESS);  // Restore default
+    glDepthFunc(GL_LESS);
 }

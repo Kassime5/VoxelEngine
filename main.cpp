@@ -13,12 +13,14 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include "src/debug/RenderStats.h"
+#include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window, World *world);
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+void initializeShaders();
 std::string formatNumber(int number);
 
 // Window Settings
@@ -81,8 +83,19 @@ int main() {
     // configure global opengl state
     glEnable(GL_DEPTH_TEST);
 
-    Shader terrainShader("assets/shader/terrain/terrain_vertex.shader", "assets/shader/terrain/terrain_fragment.shader");
+    initializeShaders();
+    Shader* terrainShader = ShaderManager::getInstance().getShader("terrain");
 
+    terrainShader->use();
+    terrainShader->setFloat("tilesPerRow", 8.0f);
+    terrainShader->setInt("texture1", 0);
+
+    // TODO: Change where the lightsource is
+    terrainShader->setVec3("lightPos", glm::vec3(0.0f, 50.0f, 0.0f));
+    terrainShader->setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
+    terrainShader->setMat4("projection", projection);
 
     // Create world and load texture atlas
     World* world = new World();
@@ -92,19 +105,6 @@ int main() {
         std::cerr << "Failed to load texture atlas!" << std::endl;
         return -1;
     }
-
-    terrainShader.use();
-    terrainShader.setFloat("tilesPerRow", 8.0f);
-    terrainShader.setInt("texture1", 0);
-
-    // TODO: Change where the lightsource is
-    terrainShader.setVec3("lightPos", glm::vec3(0.0f, 50.0f, 0.0f));
-    terrainShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
-
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
-    terrainShader.setMat4("projection", projection);
-
-    // world.update(camera.Position);
 
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
@@ -138,18 +138,18 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         world->update(camera.Position);
-        terrainShader.use();
+        terrainShader->use();
 
-        terrainShader.setVec3("viewPos", camera.Position);
+        terrainShader->setVec3("viewPos", camera.Position);
 
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom),
             (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
-        terrainShader.setMat4("projection", projection);
+        terrainShader->setMat4("projection", projection);
 
         glm::mat4 view = camera.GetViewMatrix();
-        terrainShader.setMat4("view", view);
+        terrainShader->setMat4("view", view);
 
-        world->render(terrainShader);
+        world->render(*terrainShader);
 
         skybox.draw(camera.GetViewMatrix(), projection);
 
@@ -306,6 +306,14 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(static_cast<float>(yoffset));
+}
+
+void initializeShaders() {
+    ShaderManager& sm = ShaderManager::getInstance();
+    sm.addShader("skybox", "assets/shader/skybox/skybox_vertex.shader",
+                           "assets/shader/skybox/skybox_fragment.shader");
+    sm.addShader("terrain", "assets/shader/terrain/terrain_vertex.shader",
+                            "assets/shader/terrain/terrain_fragment.shader");
 }
 
 std::string formatNumber(int number) {

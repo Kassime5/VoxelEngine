@@ -5,10 +5,8 @@
 #ifndef GLFWVOXEL_SKYBOX_H
 #define GLFWVOXEL_SKYBOX_H
 
-#include <glad/glad.h>
 #include <string>
 #include <vector>
-#include "Shader.h"
 #include <glm/glm.hpp>
 
 class Skybox {
@@ -22,11 +20,11 @@ public:
 private:
     unsigned int VAO, VBO;
     unsigned int textureID;
-    Shader shader;
 
     void setupMesh();
     unsigned int loadCubemap(const std::vector<std::string>& faces);
-};
 
+    static const char* SHADER_NAME;
+};
 
 #endif //GLFWVOXEL_SKYBOX_H
