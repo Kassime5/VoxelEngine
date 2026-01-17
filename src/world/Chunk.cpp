@@ -92,28 +92,195 @@ void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *
     meshData.vertices.reserve(SIZE * SIZE * 4);
     meshData.indices.reserve(SIZE * SIZE * 6);
 
-    for (int x = 0; x < SIZE; x++) {
-        for (int y = 0; y < HEIGHT; y++) {
-            for (int z = 0; z < SIZE; z++) {
-                BlockType block = m_blocks[x][y][z];
-                if (block == BlockType::Air) continue;
+    // Greedy mesh each axis separately
+    greedyMeshAxis(meshData, atlas, world, 0); // X-axis (YZ plane)
+    greedyMeshAxis(meshData, atlas, world, 1); // Y-axis (XZ plane)
+    greedyMeshAxis(meshData, atlas, world, 2); // Z-axis (XY plane)
 
-                glm::vec3 blockPos(x, y, z);
+    m_state.store(ChunkState::MeshBuilt);
+}
 
-                for (int face = 0; face < 6; face++) {
-                    int nx = FACE_NORMALS[face][0];
-                    int ny = FACE_NORMALS[face][1];
-                    int nz = FACE_NORMALS[face][2];
+void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World *world, int axis) {
+    // axis: 0=X, 1=Y, 2=Z
+    // We'll scan along this axis and mesh the perpendicular plane
+    int u = (axis + 1) % 3; // First perpendicular axis
+    int v = (axis + 2) % 3; // Second perpendicular axis
 
-                    if (shouldRenderFace(x, y, z, nx, ny, nz, world)) {
-                        addFace(meshData.vertices, meshData.indices, blockPos, face, block, atlas);
+    int chunkSize[3] = {SIZE, HEIGHT, SIZE};
+    int x[3] = {0, 0, 0};
+    int q[3] = {0, 0, 0};
+    q[axis] = 1; // Direction vector along the axis
+
+    // Mapping from axis to face directions
+    // axis 0 (X): faces 0 (right) and 1 (left)
+    // axis 1 (Y): faces 2 (top) and 3 (bottom)
+    // axis 2 (Z): faces 4 (front) and 5 (back)
+    BlockFace positiveFace = static_cast<BlockFace>(axis * 2);
+    BlockFace negativeFace = static_cast<BlockFace>(axis * 2 + 1);
+
+    // For each slice along the axis
+    for (x[axis] = -1; x[axis] < chunkSize[axis]; ) {
+        // Build mask for this slice
+        struct MaskEntry {
+            BlockType blockType;
+            BlockFace face;
+        };
+
+        MaskEntry mask[SIZE * HEIGHT];
+        int n = 0;
+
+        // Scan the perpendicular plane
+        for (x[v] = 0; x[v] < chunkSize[v]; ++x[v]) {
+            for (x[u] = 0; x[u] < chunkSize[u]; ++x[u]) {
+                // Get blocks on both sides of the current slice
+                BlockType blockCurrent = (x[axis] >= 0) ? getBlock(x[0], x[1], x[2]) : BlockType::Air;
+                BlockType blockNext = (x[axis] < chunkSize[axis] - 1) ?
+                    getBlock(x[0] + q[0], x[1] + q[1], x[2] + q[2]) : BlockType::Air;
+
+                // Check neighbor chunks if at boundary
+                if (x[axis] == chunkSize[axis] - 1 && world) {
+                    int worldX = m_position.x * SIZE + x[0] + q[0];
+                    int worldY = x[1] + q[1];
+                    int worldZ = m_position.z * SIZE + x[2] + q[2];
+                    blockNext = world->getBlock(worldX, worldY, worldZ);
+                }
+
+                // Check if we need to render a face here
+                bool currentOpaque = isBlockOpaque(blockCurrent);
+                bool nextOpaque = isBlockOpaque(blockNext);
+
+                if (currentOpaque == nextOpaque) {
+                    // No face needed (both solid or both air)
+                    mask[n++] = {BlockType::Air, BlockFace::Top};
+                } else if (currentOpaque) {
+                    // Render positive face (current block facing +axis direction)
+                    mask[n++] = {blockCurrent, positiveFace};
+                } else {
+                    // Render negative face (next block facing -axis direction)
+                    mask[n++] = {blockNext, negativeFace};
+                }
+            }
+        }
+
+        ++x[axis];
+        n = 0;
+
+        // Generate mesh from mask using greedy meshing
+        for (int j = 0; j < chunkSize[v]; ++j) {
+            for (int i = 0; i < chunkSize[u]; ) {
+                if (mask[n].blockType != BlockType::Air) {
+                    BlockType currentBlock = mask[n].blockType;
+                    BlockFace currentFace = mask[n].face;
+
+                    // Compute width - merge quads with same block type AND face
+                    int w;
+                    for (w = 1; i + w < chunkSize[u] &&
+                         mask[n + w].blockType == currentBlock &&
+                         mask[n + w].face == currentFace; ++w) {}
+
+                    // Compute height
+                    bool done = false;
+                    int h;
+                    for (h = 1; j + h < chunkSize[v]; ++h) {
+                        for (int k = 0; k < w; ++k) {
+                            if (mask[n + k + h * chunkSize[u]].blockType != currentBlock ||
+                                mask[n + k + h * chunkSize[u]].face != currentFace) {
+                                done = true;
+                                break;
+                            }
+                        }
+                        if (done) break;
                     }
+
+                    // Add quad with dimensions w x h
+                    x[u] = i;
+                    x[v] = j;
+
+                    int du[3] = {0, 0, 0};
+                    int dv[3] = {0, 0, 0};
+                    du[u] = w;
+                    dv[v] = h;
+
+                    addGreedyQuad(meshData, x, du, dv, currentBlock, currentFace, atlas, w, h);
+
+                    // Clear the mask for the quad we just added
+                    for (int l = 0; l < h; ++l) {
+                        for (int k = 0; k < w; ++k) {
+                            mask[n + k + l * chunkSize[u]].blockType = BlockType::Air;
+                        }
+                    }
+
+                    i += w;
+                    n += w;
+                } else {
+                    ++i;
+                    ++n;
                 }
             }
         }
     }
+}
 
-    m_state.store(ChunkState::MeshBuilt);
+void Chunk::addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
+                          BlockType block, BlockFace face, const TextureAtlas *atlas, int width, int height) {
+    // Calculate the four corners of the quad
+    glm::u8vec3 v1(x[0], x[1], x[2]);
+    glm::u8vec3 v2(x[0] + du[0], x[1] + du[1], x[2] + du[2]);
+    glm::u8vec3 v3(x[0] + du[0] + dv[0], x[1] + du[1] + dv[1], x[2] + du[2] + dv[2]);
+    glm::u8vec3 v4(x[0] + dv[0], x[1] + dv[1], x[2] + dv[2]);
+
+    // Get the tile index for this block face
+    uint8_t tileIndex = atlas->getBlockFaceTileIndex(block, face);
+
+    // Get normal ID for this face
+    uint8_t normalId = static_cast<uint8_t>(face);
+
+    uint32_t baseIndex = meshData.vertices.size();
+
+    uint8_t c0, c1, c2, c3;
+    uint8_t w, h;
+    if (face == BlockFace::Front || face == BlockFace::Back) {
+        // Need to rotate UVs 90 degrees clockwise for Z-axis
+        c0 = 1;
+        c1 = 2;
+        c2 = 3;
+        c3 = 0;
+        // AND swap width/height so tiling works correctly
+        w = static_cast<uint8_t>(height);
+        h = static_cast<uint8_t>(width);
+    } else {
+        // Normal orientation for X and Y faces
+        c0 = 0;
+        c1 = 1;
+        c2 = 2;
+        c3 = 3;
+        w = static_cast<uint8_t>(width);
+        h = static_cast<uint8_t>(height);
+    }
+
+    meshData.vertices.push_back({v1, tileIndex, c0, normalId, w, h});
+    meshData.vertices.push_back({v2, tileIndex, c1, normalId, w, h});
+    meshData.vertices.push_back({v3, tileIndex, c2, normalId, w, h});
+    meshData.vertices.push_back({v4, tileIndex, c3, normalId, w, h});
+
+    // Add indices (two triangles)
+    bool backFace = (static_cast<int>(face) % 2 == 1);
+
+    if (backFace) {
+        meshData.indices.push_back(baseIndex);
+        meshData.indices.push_back(baseIndex + 2);
+        meshData.indices.push_back(baseIndex + 1);
+        meshData.indices.push_back(baseIndex);
+        meshData.indices.push_back(baseIndex + 3);
+        meshData.indices.push_back(baseIndex + 2);
+    } else {
+        meshData.indices.push_back(baseIndex);
+        meshData.indices.push_back(baseIndex + 1);
+        meshData.indices.push_back(baseIndex + 2);
+        meshData.indices.push_back(baseIndex);
+        meshData.indices.push_back(baseIndex + 2);
+        meshData.indices.push_back(baseIndex + 3);
+    }
 }
 
 void Chunk::uploadMeshToGPU(const MeshData& meshData) {

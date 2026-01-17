@@ -274,7 +274,7 @@ void processInput(GLFWwindow *window, World *world) {
 
     if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !keyC) {
         keyC = true;
-        world->setBlock(camera.Position.x, camera.Position.y, camera.Position.z, BlockType::Sand);
+        world->setBlock(camera.Position.x, camera.Position.y, camera.Position.z, BlockType::Grass);
     } else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
         keyC = false;
     }

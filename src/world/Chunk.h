@@ -39,6 +39,12 @@ struct MeshData {
     }
 };
 
+struct QuadMask {
+    BlockType blockType;
+    int width;
+    int height;
+};
+
 class Chunk {
 public:
     static constexpr int SIZE = 64;
@@ -54,6 +60,8 @@ public:
 
     // Split mesh generation into two phases
     void buildMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
+
+    void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas, World *world, int axis);
 
     void uploadMeshToGPU(const MeshData& meshData);
 
@@ -80,6 +88,10 @@ private:
     void addFace(std::vector<Vertex>& vertices, std::vector<unsigned int>& indices,
                  const glm::vec3& pos, int faceIndex, BlockType blockType,
                  const TextureAtlas* atlas);
+
+    void addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
+                          BlockType block, BlockFace face, const TextureAtlas *atlas,
+                          int width, int height);
 
 };
 

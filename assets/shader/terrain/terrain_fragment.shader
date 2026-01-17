@@ -1,17 +1,34 @@
-﻿#version 460 core
+#version 460 core
 out vec4 FragColor;
 
-in vec2 TexCoord;
+in vec2 LocalUV;
 in vec3 Normal;
 in vec3 FragPos;
+flat in uint TileIndex;
 
 uniform sampler2D ourTexture;
 uniform vec3 lightPos;
 uniform vec3 lightColor;
 uniform vec3 viewPos;
+uniform float tilesPerRow;
 
 void main()
 {
+    // Normalize LocalUV to 0-1 range for a single tile
+    vec2 normalizedUV = fract(LocalUV);
+
+    // Calculate tile position in atlas
+    float tileX = float(TileIndex % uint(tilesPerRow));
+    float tileY = float(TileIndex / uint(tilesPerRow));
+
+    // Calculate final UV within the atlas
+    float tileSize = 1.0 / tilesPerRow;
+
+    vec2 TexCoord = vec2(
+        tileX * tileSize + normalizedUV.x * tileSize,
+        tileY * tileSize + normalizedUV.y * tileSize
+    );
+
     // ambient
     float ambientStrength = 0.1;
     vec3 ambient = ambientStrength * lightColor;

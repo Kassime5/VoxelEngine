@@ -99,6 +99,14 @@ void Mesh::setupMesh() {
     glVertexAttribIPointer(3, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, normalId));
     glEnableVertexAttribArray(3);
 
+    // Quad Width (NEW)
+    glVertexAttribIPointer(4, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, quadWidth));
+    glEnableVertexAttribArray(4);
+
+    // Quad Height (NEW)
+    glVertexAttribIPointer(5, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, quadHeight));
+    glEnableVertexAttribArray(5);
+
     glBindVertexArray(0);
     initialized = true;
 }

@@ -13,6 +13,8 @@ struct Vertex {
     uint8_t tileIndex;
     uint8_t cornerIndex;
     uint8_t normalId;
+    uint8_t quadWidth;
+    uint8_t quadHeight;
 };
 
 class Mesh {
