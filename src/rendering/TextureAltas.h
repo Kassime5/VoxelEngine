@@ -40,6 +40,7 @@ public:
     bool isLoaded() const { return m_atlas.isValid(); }
     int getTilesPerRow() const { return m_tilesPerRow; }
 
+    uint8_t getBlockFaceTileIndex(BlockType block, BlockFace face) const;
 private:
     Texture m_atlas;
     int m_tilesPerRow;

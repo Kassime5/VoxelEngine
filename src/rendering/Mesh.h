@@ -9,9 +9,10 @@
 #include <glm/glm.hpp>
 
 struct Vertex {
-    glm::vec3 position;
-    glm::vec2 texCoords;
-    glm::vec3 normal;
+    glm::u8vec3 position;
+    uint8_t tileIndex;
+    uint8_t cornerIndex;
+    uint8_t normalId;
 };
 
 class Mesh {

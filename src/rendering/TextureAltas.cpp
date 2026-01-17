@@ -103,3 +103,22 @@ std::array<glm::vec2, 4> TextureAtlas::getBlockFaceUVs(BlockType block, BlockFac
 
     return getTileUVs(tileX, tileY);
 }
+
+uint8_t TextureAtlas::getBlockFaceTileIndex(BlockType block, BlockFace face) const {
+    BlockTexture tex = getBlockTexture(block);
+    int tileIndex;
+
+    switch (face) {
+    case BlockFace::Top:
+        tileIndex = tex.topTile;
+        break;
+    case BlockFace::Bottom:
+        tileIndex = tex.bottomTile;
+        break;
+    default:
+        tileIndex = tex.sideTile;
+        break;
+    }
+
+    return static_cast<uint8_t>(tileIndex);
+}

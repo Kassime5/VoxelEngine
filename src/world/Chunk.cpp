@@ -7,52 +7,21 @@
 #include "World.h"
 
 // position (x, y, z), texCoords (u, v)
-static const float FACE_VERTICES[6][4][5] = {
+static const uint8_t FACE_VERTEX_OFFSETS[6][4][3] = {
     // Front face (Z+)
-    {
-        {0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
-        {1.0f, 0.0f, 1.0f, 1.0f, 0.0f},
-        {1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-        {0.0f, 1.0f, 1.0f, 0.0f, 1.0f}
-    },
+    {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}},
     // Back face (Z-)
-    {
-        {1.0f, 0.0f, 0.0f, 0.0f, 0.0f},
-        {0.0f, 0.0f, 0.0f, 1.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 0.0f, 0.0f, 1.0f}
-    },
+    {{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}},
     // Top face (Y+)
-    {
-        {0.0f, 1.0f, 1.0f, 0.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 0.0f, 1.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f, 0.0f, 0.0f}
-    },
+    {{0, 1, 1}, {1, 1, 1}, {1, 1, 0}, {0, 1, 0}},
     // Bottom face (Y-)
-    {
-        {0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-        {1.0f, 0.0f, 0.0f, 1.0f, 1.0f},
-        {1.0f, 0.0f, 1.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, 1.0f, 0.0f, 0.0f}
-    },
+    {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}},
     // Right face (X+)
-    {
-        {1.0f, 0.0f, 1.0f, 0.0f, 0.0f},
-        {1.0f, 0.0f, 0.0f, 1.0f, 0.0f},
-        {1.0f, 1.0f, 0.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f, 0.0f, 1.0f}
-    },
+    {{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}},
     // Left face (X-)
-    {
-        {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
-        {0.0f, 0.0f, 1.0f, 1.0f, 0.0f},
-        {0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-        {0.0f, 1.0f, 0.0f, 0.0f, 1.0f}
-    }
+    {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}
 };
 
-// Face normals for culling checks (dx, dy, dz)
 static const int FACE_NORMALS[6][3] = {
     {0, 0, 1}, // Front
     {0, 0, -1}, // Back
@@ -194,22 +163,22 @@ void Chunk::addFace(std::vector<Vertex> &vertices, std::vector<unsigned int> &in
     unsigned int startIndex = vertices.size();
 
     std::array<glm::vec2, 4> uvs;
+    uint8_t tileIndex = 0;
     if (atlas) {
         BlockFace face = static_cast<BlockFace>(faceIndex);
-        uvs = atlas->getBlockFaceUVs(blockType, face);
-    } else {
-        uvs = {glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(1, 1), glm::vec2(0, 1)};
+        tileIndex = atlas->getBlockFaceTileIndex(blockType, face);
     }
 
     for (int i = 0; i < 4; i++) {
         Vertex vertex;
-        vertex.position = glm::vec3(
-            pos.x + FACE_VERTICES[faceIndex][i][0],
-            pos.y + FACE_VERTICES[faceIndex][i][1],
-            pos.z + FACE_VERTICES[faceIndex][i][2]
+        vertex.position = glm::u8vec3(
+            static_cast<uint8_t>(pos.x) + FACE_VERTEX_OFFSETS[faceIndex][i][0],
+            static_cast<uint8_t>(pos.y) + FACE_VERTEX_OFFSETS[faceIndex][i][1],
+            static_cast<uint8_t>(pos.z) + FACE_VERTEX_OFFSETS[faceIndex][i][2]
         );
-        vertex.texCoords = uvs[i];
-        vertex.normal = glm::vec3(FACE_NORMALS[faceIndex][0], FACE_NORMALS[faceIndex][1], FACE_NORMALS[faceIndex][2]);
+        vertex.tileIndex = tileIndex;
+        vertex.cornerIndex = i;  // 0, 1, 2, 3 for the four corners
+        vertex.normalId = faceIndex;
         vertices.push_back(vertex);
     }
 

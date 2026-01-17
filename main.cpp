@@ -13,6 +13,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include "src/debug/RenderStats.h"
+#include "src/rendering/Skybox.h"
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window, World *world);
@@ -64,11 +65,23 @@ int main() {
         return -1;
     }
 
+    Skybox skybox;
+    std::vector<std::string> faces = {
+        "assets/textures/skybox/right.png",
+        "assets/textures/skybox/left.png",
+        "assets/textures/skybox/top.png",
+        "assets/textures/skybox/bottom.png",
+        "assets/textures/skybox/front.png",
+        "assets/textures/skybox/back.png"
+    };
+    if (!skybox.load(faces)) {
+        std::cerr << "Failed to load skybox!" << std::endl;
+    }
+
     // configure global opengl state
     glEnable(GL_DEPTH_TEST);
 
-    // build and compile our shader program
-    Shader ourShader("assets/shader/4.6.shader.vs", "assets/shader/4.6.shader.fs");
+    Shader terrainShader("assets/shader/terrain/terrain_vertex.shader", "assets/shader/terrain/terrain_fragment.shader");
 
 
     // Create world and load texture atlas
@@ -80,15 +93,16 @@ int main() {
         return -1;
     }
 
-    ourShader.use();
-    ourShader.setInt("texture1", 0);
+    terrainShader.use();
+    terrainShader.setFloat("tilesPerRow", 8.0f);
+    terrainShader.setInt("texture1", 0);
 
     // TODO: Change where the lightsource is
-    ourShader.setVec3("lightPos", glm::vec3(0.0f, 50.0f, 0.0f));
-    ourShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+    terrainShader.setVec3("lightPos", glm::vec3(0.0f, 50.0f, 0.0f));
+    terrainShader.setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
 
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
-    ourShader.setMat4("projection", projection);
+    terrainShader.setMat4("projection", projection);
 
     // world.update(camera.Position);
 
@@ -124,18 +138,20 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         world->update(camera.Position);
-        ourShader.use();
+        terrainShader.use();
 
-        ourShader.setVec3("viewPos", camera.Position);
+        terrainShader.setVec3("viewPos", camera.Position);
 
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom),
             (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
-        ourShader.setMat4("projection", projection);
+        terrainShader.setMat4("projection", projection);
 
         glm::mat4 view = camera.GetViewMatrix();
-        ourShader.setMat4("view", view);
+        terrainShader.setMat4("view", view);
 
-        world->render(ourShader);
+        world->render(terrainShader);
+
+        skybox.draw(camera.GetViewMatrix(), projection);
 
 
         // ImGUI Rendering

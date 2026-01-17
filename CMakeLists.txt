@@ -51,7 +51,9 @@ add_executable(GLFWVoxel main.cpp
         src/core/Window.h
         src/rendering/Profiler.h
         src/debug/RenderStats.h
-        src/debug/GPUStats.h)
+        src/debug/GPUStats.h
+        src/rendering/Skybox.cpp
+        src/rendering/Skybox.h)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
