@@ -52,24 +52,24 @@ static const float skyboxVertices[] = {
 };
 
 Skybox::Skybox()
-    : m_VAO(0), m_VBO(0), m_textureID(0),
-      m_shader("assets/shader/skybox/skybox_vertex.shader",
+    : VAO(0), VBO(0), textureID(0),
+      shader("assets/shader/skybox/skybox_vertex.shader",
                "assets/shader/skybox/skybox_fragment.shader") {
     setupMesh();
 }
 
 Skybox::~Skybox() {
-    glDeleteVertexArrays(1, &m_VAO);
-    glDeleteBuffers(1, &m_VBO);
-    glDeleteTextures(1, &m_textureID);
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
+    glDeleteTextures(1, &textureID);
 }
 
 void Skybox::setupMesh() {
-    glGenVertexArrays(1, &m_VAO);
-    glGenBuffers(1, &m_VBO);
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
 
-    glBindVertexArray(m_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
@@ -79,8 +79,8 @@ void Skybox::setupMesh() {
 }
 
 bool Skybox::load(const std::vector<std::string>& faces) {
-    m_textureID = loadCubemap(faces);
-    return m_textureID != 0;
+    textureID = loadCubemap(faces);
+    return textureID != 0;
 }
 
 unsigned int Skybox::loadCubemap(const std::vector<std::string>& faces) {
@@ -116,13 +116,13 @@ void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
     // Draw skybox last, with depth test but write disabled
     glDepthFunc(GL_LEQUAL);
 
-    m_shader.use();
-    m_shader.setMat4("view", view);
-    m_shader.setMat4("projection", projection);
+    shader.use();
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
 
-    glBindVertexArray(m_VAO);
+    glBindVertexArray(VAO);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
 

@@ -7,24 +7,24 @@
 #include <iostream>
 #include <ostream>
 
-TextureAtlas::TextureAtlas() : m_tilesPerRow(8) {
+TextureAtlas::TextureAtlas() : tilesPerRow(8) {
 }
 
 bool TextureAtlas::load(const char* atlasPath, int tilesPerRow) {
-    m_tilesPerRow = tilesPerRow;
+    tilesPerRow = tilesPerRow;
 
-    bool success = m_atlas.load(atlasPath);
+    bool success = atlas.load(atlasPath);
     if (success) {
         // Set texture parameters for pixel art style
-        m_atlas.setFilterMode(Texture::FilterMode::Nearest, Texture::FilterMode::Nearest);
-        m_atlas.setWrapMode(Texture::WrapMode::Repeat, Texture::WrapMode::Repeat);
+        atlas.setFilterMode(Texture::FilterMode::Nearest, Texture::FilterMode::Nearest);
+        atlas.setWrapMode(Texture::WrapMode::Repeat, Texture::WrapMode::Repeat);
     }
 
     return success;
 }
 
 void TextureAtlas::bind(unsigned int slot) const {
-    m_atlas.bind(slot);
+    atlas.bind(slot);
 }
 
 BlockTexture TextureAtlas::getBlockTexture(BlockType block) const {
@@ -66,7 +66,7 @@ BlockTexture TextureAtlas::getBlockTexture(BlockType block) const {
 }
 
 std::array<glm::vec2, 4> TextureAtlas::getTileUVs(int tileX, int tileY) const {
-    float tileSize = 1.0f / m_tilesPerRow;
+    float tileSize = 1.0f / tilesPerRow;
     float u0 = tileX * tileSize;
     float v0 = tileY * tileSize;
     float u1 = u0 + tileSize;
@@ -98,8 +98,8 @@ std::array<glm::vec2, 4> TextureAtlas::getBlockFaceUVs(BlockType block, BlockFac
             break;
     }
 
-    int tileX = tileIndex % m_tilesPerRow;
-    int tileY = tileIndex / m_tilesPerRow;
+    int tileX = tileIndex % tilesPerRow;
+    int tileY = tileIndex / tilesPerRow;
 
     return getTileUVs(tileX, tileY);
 }

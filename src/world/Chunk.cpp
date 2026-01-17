@@ -32,8 +32,8 @@ static const int FACE_NORMALS[6][3] = {
 };
 
 Chunk::Chunk(const glm::ivec3 &position)
-    : m_position(position), m_isDirty(true), m_state(ChunkState::Empty) {
-    for (auto & m_block : m_blocks) {
+    : chunkPosition(position), chunkDirty(true), chunkState(ChunkState::Empty) {
+    for (auto & m_block : chunkBlocks) {
         for (auto & y : m_block) {
             for (auto & z : y) {
                 z = BlockType::Air;
@@ -46,25 +46,22 @@ BlockType Chunk::getBlock(int x, int y, int z) const {
     if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) {
         return BlockType::Air;
     }
-    std::lock_guard<std::mutex> lock(m_blocksMutex);
-    return m_blocks[x][y][z];
+    return chunkBlocks[x][y][z];
 }
 
 void Chunk::setBlock(int x, int y, int z, BlockType type) {
     if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) {
         return;
     }
-    std::lock_guard<std::mutex> lock(m_blocksMutex);
-    m_blocks[x][y][z] = type;
-    m_isDirty = true;
+    chunkBlocks[x][y][z] = type;
+    chunkDirty = true;
 }
 
 void Chunk::generate(const siv::PerlinNoise* perlinNoise) {
-    // std::lock_guard<std::mutex> lock(m_blocksMutex);
     for (int x = 0; x < SIZE; x++) {
         for (int z = 0; z < SIZE; z++) {
-            int worldX = m_position.x * SIZE + x;
-            int worldZ = m_position.z * SIZE + z;
+            int worldX = chunkPosition.x * SIZE + x;
+            int worldZ = chunkPosition.z * SIZE + z;
 
             double noise = perlinNoise->octave2D_01(worldX * 0.01, worldZ * 0.01, 4);
             float height = 16.0f + static_cast<float>(noise) * 32.0f;
@@ -72,17 +69,17 @@ void Chunk::generate(const siv::PerlinNoise* perlinNoise) {
 
             for (int y = 0; y < HEIGHT; y++) {
                 if (y < terrainHeight - 3) {
-                    m_blocks[x][y][z] = BlockType::Stone;
+                    chunkBlocks[x][y][z] = BlockType::Stone;
                 } else if (y < terrainHeight - 1) {
-                    m_blocks[x][y][z] = BlockType::Dirt;
+                    chunkBlocks[x][y][z] = BlockType::Dirt;
                 } else if (y < terrainHeight) {
-                    m_blocks[x][y][z] = BlockType::Grass;
+                    chunkBlocks[x][y][z] = BlockType::Grass;
                 }
             }
         }
     }
-    m_isDirty = true;
-    m_state.store(ChunkState::Generated);
+    chunkDirty = true;
+    chunkState.store(ChunkState::Generated);
 }
 
 void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *world) {
@@ -97,7 +94,7 @@ void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *
     greedyMeshAxis(meshData, atlas, world, 1); // Y-axis (XZ plane)
     greedyMeshAxis(meshData, atlas, world, 2); // Z-axis (XY plane)
 
-    m_state.store(ChunkState::MeshBuilt);
+    chunkState.store(ChunkState::MeshBuilt);
 }
 
 void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World *world, int axis) {
@@ -139,9 +136,9 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World 
 
                 // Check neighbor chunks if at boundary
                 if (x[axis] == chunkSize[axis] - 1 && world) {
-                    int worldX = m_position.x * SIZE + x[0] + q[0];
+                    int worldX = chunkPosition.x * SIZE + x[0] + q[0];
                     int worldY = x[1] + q[1];
-                    int worldZ = m_position.z * SIZE + x[2] + q[2];
+                    int worldZ = chunkPosition.z * SIZE + x[2] + q[2];
                     blockNext = world->getBlock(worldX, worldY, worldZ);
                 }
 
@@ -285,16 +282,16 @@ void Chunk::addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
 
 void Chunk::uploadMeshToGPU(const MeshData& meshData) {
     PROFILE_SCOPE("Chunk::uploadMeshToGPU");
-    m_mesh.setData(meshData.vertices, meshData.indices);
-    m_isDirty = false;
-    m_state.store(ChunkState::Ready);
+    chunkMesh.setData(meshData.vertices, meshData.indices);
+    chunkDirty = false;
+    chunkState.store(ChunkState::Ready);
 }
 
 bool Chunk::isBlockAt(int x, int y, int z) const {
     if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) {
         return false; // Treat out-of-bounds as air
     }
-    return isBlockOpaque(m_blocks[x][y][z]);
+    return isBlockOpaque(chunkBlocks[x][y][z]);
 }
 
 bool Chunk::shouldRenderFace(int x, int y, int z, int nx, int ny, int nz, World *world) const {
@@ -309,14 +306,14 @@ bool Chunk::shouldRenderFace(int x, int y, int z, int nx, int ny, int nz, World 
     // Check if neighbor is within this chunk
     if (neighborX >= 0 && neighborX < SIZE && neighborY >= 0 && neighborY < HEIGHT && neighborZ >= 0 && neighborZ <
         SIZE) {
-        return !isBlockOpaque(m_blocks[neighborX][neighborY][neighborZ]);
+        return !isBlockOpaque(chunkBlocks[neighborX][neighborY][neighborZ]);
     }
 
     // TODO: Currently doesn't work if the chunk is still generating
     if (world) {
-        int worldX = m_position.x * SIZE + neighborX;
+        int worldX = chunkPosition.x * SIZE + neighborX;
         int worldY = neighborY;
-        int worldZ = m_position.z * SIZE + neighborZ;
+        int worldZ = chunkPosition.z * SIZE + neighborZ;
         BlockType neighborBlock = world->getBlock(worldX, worldY, worldZ);
         return !isBlockOpaque(neighborBlock);
     }
@@ -359,7 +356,7 @@ void Chunk::addFace(std::vector<Vertex> &vertices, std::vector<unsigned int> &in
 }
 
 void Chunk::draw() const {
-    if (!m_mesh.isEmpty()) {
-        m_mesh.draw();
+    if (!chunkMesh.isEmpty()) {
+        chunkMesh.draw();
     }
 }

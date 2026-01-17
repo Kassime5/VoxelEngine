@@ -8,11 +8,11 @@
 #include <iostream>
 
 Texture::Texture()
-    : id(0), width(0), height(0), channels(0), m_hasMipmaps(false) {
+    : id(0), width(0), height(0), channels(0), hasMipmaps(false) {
 }
 
 Texture::Texture(const char* path, bool generateMipmaps)
-    : id(0), width(0), height(0), channels(0), m_hasMipmaps(false) {
+    : id(0), width(0), height(0), channels(0), hasMipmaps(false) {
     load(path, generateMipmaps);
 }
 
@@ -29,12 +29,12 @@ Texture::Texture(Texture&& other) noexcept
       width(other.width),
       height(other.height),
       channels(other.channels),
-      m_hasMipmaps(other.m_hasMipmaps) {
+      hasMipmaps(other.hasMipmaps) {
     other.id = 0;
     other.width = 0;
     other.height = 0;
     other.channels = 0;
-    other.m_hasMipmaps = false;
+    other.hasMipmaps = false;
 }
 
 Texture& Texture::operator=(Texture&& other) noexcept {
@@ -45,13 +45,13 @@ Texture& Texture::operator=(Texture&& other) noexcept {
         width = other.width;
         height = other.height;
         channels = other.channels;
-        m_hasMipmaps = other.m_hasMipmaps;
+        hasMipmaps = other.hasMipmaps;
 
         other.id = 0;
         other.width = 0;
         other.height = 0;
         other.channels = 0;
-        other.m_hasMipmaps = false;
+        other.hasMipmaps = false;
     }
     return *this;
 }
@@ -97,7 +97,7 @@ bool Texture::load(const char* path, bool generateMipmaps) {
     // Generate mipmaps if requested
     if (generateMipmaps) {
         glGenerateMipmap(GL_TEXTURE_2D);
-        m_hasMipmaps = true;
+        hasMipmaps = true;
     }
 
     // Free image data
@@ -152,7 +152,7 @@ void Texture::cleanup() {
         width = 0;
         height = 0;
         channels = 0;
-        m_hasMipmaps = false;
+        hasMipmaps = false;
     }
 }
 

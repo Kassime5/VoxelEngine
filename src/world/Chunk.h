@@ -53,34 +53,28 @@ public:
     Chunk(const glm::ivec3& position);
     ~Chunk() = default;
 
-    BlockType getBlock(int x, int y, int z) const;
-    void setBlock(int x, int y, int z, BlockType type);
-
     void generate(const siv::PerlinNoise* perlinNoise = nullptr);
-
-    // Split mesh generation into two phases
     void buildMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
-
     void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas, World *world, int axis);
-
     void uploadMeshToGPU(const MeshData& meshData);
-
     void draw() const;
 
-    glm::ivec3 getPosition() const { return m_position; }
-    bool isDirty() const { return m_isDirty; }
-    void markDirty() { m_isDirty = true; }
+    glm::ivec3 getPosition() const { return chunkPosition; }
 
-    ChunkState getState() const { return m_state.load(); }
-    void setState(ChunkState state) { m_state.store(state); }
+    bool isDirty() const { return chunkDirty; }
+    void markDirty() { chunkDirty = true; }
 
+    ChunkState getState() const { return chunkState.load(); }
+    void setState(ChunkState state) { chunkState.store(state); }
+
+    BlockType getBlock(int x, int y, int z) const;
+    void setBlock(int x, int y, int z, BlockType type);
 private:
-    glm::ivec3 m_position;
-    BlockType m_blocks[SIZE][HEIGHT][SIZE];
-    Mesh m_mesh;
-    bool m_isDirty;
-    std::atomic<ChunkState> m_state;
-    mutable std::mutex m_blocksMutex;
+    glm::ivec3 chunkPosition;
+    BlockType chunkBlocks[SIZE][HEIGHT][SIZE];
+    Mesh chunkMesh;
+    bool chunkDirty;
+    std::atomic<ChunkState> chunkState;
 
     bool isBlockAt(int x, int y, int z) const;
     bool shouldRenderFace(int x, int y, int z, int nx, int ny, int nz, World *world) const;
@@ -92,7 +86,6 @@ private:
     void addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
                           BlockType block, BlockFace face, const TextureAtlas *atlas,
                           int width, int height);
-
 };
 
 

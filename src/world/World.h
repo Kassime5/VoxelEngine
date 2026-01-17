@@ -55,36 +55,36 @@ public:
     Chunk* getChunk(const glm::ivec3& chunkPos);
     Chunk* getChunkAt(int worldX, int worldY, int worldZ);
 
-    void setRenderDistance(int distance) { m_renderDistance = distance; }
-    int getRenderDistance() const { return m_renderDistance; }
+    void setRenderDistance(int distance) { renderDistance = distance; }
+    int getRenderDistance() const { return renderDistance; }
     int getLoadedChunkCount() const { return m_chunks.size(); }
     void printDebugInfo() const;
 
 private:
     std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash> m_chunks;
-    TextureAtlas m_textureAtlas;
-    int m_renderDistance;
-    glm::ivec3 m_lastCameraChunkPos;
+    TextureAtlas textureAtlas;
+    int renderDistance;
+    glm::ivec3 lastCameraChunkPos;
 
     // Thread pool
-    std::vector<std::thread> m_generationThreads;
-    std::queue<ChunkGenerationTask> m_generationQueue;
-    std::mutex m_generationQueueMutex;
-    std::condition_variable m_generationQueueCV;
+    std::vector<std::thread> generationThreads;
+    std::queue<ChunkGenerationTask> generationQueue;
+    std::mutex generationQueueMutex;
+    std::condition_variable generationQueueCV;
 
     // Thread pool for mesh building
-    std::vector<std::thread> m_meshBuildThreads;
-    std::queue<ChunkMeshTask> m_meshBuildQueue;
-    std::mutex m_meshBuildQueueMutex;
-    std::condition_variable m_meshBuildQueueCV;
+    std::vector<std::thread> meshBuildThreads;
+    std::queue<ChunkMeshTask> meshBuildQueue;
+    std::mutex meshBuildQueueMutex;
+    std::condition_variable meshBuildQueueCV;
 
     // GPU upload queue (processed on main thread)
-    std::queue<ChunkMeshTask> m_gpuUploadQueue;
-    std::mutex m_gpuUploadQueueMutex;
+    std::queue<ChunkMeshTask> gpuUploadQueue;
+    std::mutex gpuUploadQueueMutex;
 
-    std::atomic<bool> m_stopThreads;
+    std::atomic<bool> stopThreads;
 
-    void initThreadPool(int generationThreads, int meshThreads);
+    void initThreadPool(int _generationThreads, int _meshThreads);
     void shutdownThreadPool();
     void generationWorkerThread();
     void meshBuildWorkerThread();

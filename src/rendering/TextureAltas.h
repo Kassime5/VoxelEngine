@@ -37,13 +37,13 @@ public:
     // Get UV coordinates for a specific block face
     std::array<glm::vec2, 4> getBlockFaceUVs(BlockType block, BlockFace face) const;
 
-    bool isLoaded() const { return m_atlas.isValid(); }
-    int getTilesPerRow() const { return m_tilesPerRow; }
+    bool isLoaded() const { return atlas.isValid(); }
+    int getTilesPerRow() const { return tilesPerRow; }
 
     uint8_t getBlockFaceTileIndex(BlockType block, BlockFace face) const;
 private:
-    Texture m_atlas;
-    int m_tilesPerRow;
+    Texture atlas;
+    int tilesPerRow;
     std::array<glm::vec2, 4> getTileUVs(int tileX, int tileY) const;
 
     // Block texture definitions

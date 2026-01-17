@@ -9,8 +9,8 @@
 #include "src/debug/RenderStats.h"
 
 World::World()
-    : m_renderDistance(8), m_lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
-      seed(1010), perlinNoise(seed), m_stopThreads(false) {
+    : renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
+      seed(1010), perlinNoise(seed), stopThreads(false) {
     initThreadPool(4, 4);
 }
 
@@ -18,47 +18,47 @@ World::~World() {
     shutdownThreadPool();
 }
 
-void World::initThreadPool(int generationThreads, int meshThreads) {
-    m_stopThreads = false;
-    for (int i = 0; i < generationThreads; i++) {
-        m_generationThreads.emplace_back(&World::generationWorkerThread, this);
+void World::initThreadPool(int _generationThreads, int _meshThreads) {
+    stopThreads = false;
+    for (int i = 0; i < _generationThreads; i++) {
+        generationThreads.emplace_back(&World::generationWorkerThread, this);
     }
-    for (int i = 0; i < meshThreads; i++) {
-        m_meshBuildThreads.emplace_back(&World::meshBuildWorkerThread, this);
+    for (int i = 0; i < _meshThreads; i++) {
+        meshBuildThreads.emplace_back(&World::meshBuildWorkerThread, this);
     }
 }
 
 void World::shutdownThreadPool() {
-    m_stopThreads = true;
-    m_generationQueueCV.notify_all();
-    m_meshBuildQueueCV.notify_all();
+    stopThreads = true;
+    generationQueueCV.notify_all();
+    meshBuildQueueCV.notify_all();
 
-    for (auto& thread : m_generationThreads) {
+    for (auto& thread : generationThreads) {
         if (thread.joinable()) thread.join();
     }
-    for (auto& thread : m_meshBuildThreads) {
+    for (auto& thread : meshBuildThreads) {
         if (thread.joinable()) thread.join();
     }
 
-    m_generationThreads.clear();
-    m_meshBuildThreads.clear();
+    generationThreads.clear();
+    meshBuildThreads.clear();
 }
 
 void World::generationWorkerThread() {
-    while (!m_stopThreads) {
+    while (!stopThreads) {
         ChunkGenerationTask task;
 
         {
-            std::unique_lock<std::mutex> lock(m_generationQueueMutex);
-            m_generationQueueCV.wait(lock, [this] {
-                return m_stopThreads || !m_generationQueue.empty();
+            std::unique_lock<std::mutex> lock(generationQueueMutex);
+            generationQueueCV.wait(lock, [this] {
+                return stopThreads || !generationQueue.empty();
             });
 
-            if (m_stopThreads && m_generationQueue.empty()) return;
+            if (stopThreads && generationQueue.empty()) return;
 
-            if (!m_generationQueue.empty()) {
-                task = m_generationQueue.front();
-                m_generationQueue.pop();
+            if (!generationQueue.empty()) {
+                task = generationQueue.front();
+                generationQueue.pop();
             } else {
                 continue;
             }
@@ -69,29 +69,29 @@ void World::generationWorkerThread() {
             task.chunk->generate(&perlinNoise);
 
             if (isChunkLoaded(task.chunkPos)) {
-                std::lock_guard<std::mutex> lock(m_meshBuildQueueMutex);
-                m_meshBuildQueue.push({task.chunk, MeshData()});
-                m_meshBuildQueueCV.notify_one();
+                std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
+                meshBuildQueue.push({task.chunk, MeshData()});
+                meshBuildQueueCV.notify_one();
             }
         }
     }
 }
 
 void World::meshBuildWorkerThread() {
-    while (!m_stopThreads) {
+    while (!stopThreads) {
         ChunkMeshTask task;
 
         {
-            std::unique_lock<std::mutex> lock(m_meshBuildQueueMutex);
-            m_meshBuildQueueCV.wait(lock, [this] {
-                return m_stopThreads || !m_meshBuildQueue.empty();
+            std::unique_lock<std::mutex> lock(meshBuildQueueMutex);
+            meshBuildQueueCV.wait(lock, [this] {
+                return stopThreads || !meshBuildQueue.empty();
             });
 
-            if (m_stopThreads && m_meshBuildQueue.empty()) return;
+            if (stopThreads && meshBuildQueue.empty()) return;
 
-            if (!m_meshBuildQueue.empty()) {
-                task = m_meshBuildQueue.front();
-                m_meshBuildQueue.pop();
+            if (!meshBuildQueue.empty()) {
+                task = meshBuildQueue.front();
+                meshBuildQueue.pop();
             } else {
                 continue;
             }
@@ -106,13 +106,13 @@ void World::meshBuildWorkerThread() {
         ChunkState currentState = task.chunk->getState();
         if (currentState == ChunkState::Generated || currentState == ChunkState::BuildingMesh) {
             task.chunk->setState(ChunkState::BuildingMesh);
-            task.chunk->buildMeshData(task.meshData, &m_textureAtlas, this);
+            task.chunk->buildMeshData(task.meshData, &textureAtlas, this);
 
             if (isChunkLoaded(chunkPos)) {
                 task.chunk->setState(ChunkState::MeshBuilt);
                 {
-                    std::lock_guard<std::mutex> lock(m_gpuUploadQueueMutex);
-                    m_gpuUploadQueue.push(std::move(task));
+                    std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
+                    gpuUploadQueue.push(std::move(task));
                 }
             }
         }
@@ -122,11 +122,11 @@ void World::meshBuildWorkerThread() {
 void World::processGPUUploadQueue(int maxPerFrame) {
     PROFILE_SCOPE("World::processGPUUploadQueue");
 
-    std::lock_guard<std::mutex> lock(m_gpuUploadQueueMutex);
+    std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
 
     int processed = 0;
-    while (!m_gpuUploadQueue.empty() && processed < maxPerFrame) {
-        ChunkMeshTask& task = m_gpuUploadQueue.front();
+    while (!gpuUploadQueue.empty() && processed < maxPerFrame) {
+        ChunkMeshTask& task = gpuUploadQueue.front();
 
         glm::ivec3 chunkPos = task.chunk->getPosition();
 
@@ -135,13 +135,13 @@ void World::processGPUUploadQueue(int maxPerFrame) {
             // TODO: Implement proper neighbor remeshing with cycle detection
         }
 
-        m_gpuUploadQueue.pop();
+        gpuUploadQueue.pop();
         processed++;
     }
 }
 
 bool World::loadTextureAtlas(const char* atlasPath, int tilesPerRow) {
-    return m_textureAtlas.load(atlasPath, tilesPerRow);
+    return textureAtlas.load(atlasPath, tilesPerRow);
 }
 
 void World::update(const glm::vec3& cameraPosition) {
@@ -155,10 +155,10 @@ void World::update(const glm::vec3& cameraPosition) {
             static_cast<int>(std::floor(cameraPosition.z))
         );
 
-        if (currentChunkPos != m_lastCameraChunkPos) {
+        if (currentChunkPos != lastCameraChunkPos) {
             loadChunksAroundPosition(currentChunkPos);
             unloadDistantChunks(currentChunkPos);
-            m_lastCameraChunkPos = currentChunkPos;
+            lastCameraChunkPos = currentChunkPos;
         }
     }
 
@@ -169,7 +169,7 @@ void World::update(const glm::vec3& cameraPosition) {
 }
 
 void World::render(Shader& shader) {
-    m_textureAtlas.bind(0);
+    textureAtlas.bind(0);
 
     for (auto& pair : m_chunks) {
         Chunk* chunk = pair.second.get();
@@ -211,9 +211,9 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
     if (chunk->getState() == ChunkState::Ready) {
         chunk->markDirty();
         chunk->setState(ChunkState::Generated);
-        std::lock_guard<std::mutex> lock(m_meshBuildQueueMutex);
-        m_meshBuildQueue.push({chunk, MeshData()});
-        m_meshBuildQueueCV.notify_one();
+        std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
+        meshBuildQueue.push({chunk, MeshData()});
+        meshBuildQueueCV.notify_one();
     }
 }
 
@@ -246,10 +246,10 @@ glm::ivec3 World::worldToLocalPos(int worldX, int worldY, int worldZ) const {
 }
 
 void World::loadChunksAroundPosition(const glm::ivec3& centerChunkPos) {
-    for (int x = -m_renderDistance; x <= m_renderDistance; x++) {
-        for (int z = -m_renderDistance; z <= m_renderDistance; z++) {
+    for (int x = -renderDistance; x <= renderDistance; x++) {
+        for (int z = -renderDistance; z <= renderDistance; z++) {
             float distance = std::sqrt(x * x + z * z);
-            if (distance > m_renderDistance) continue;
+            if (distance > renderDistance) continue;
 
             glm::ivec3 chunkPos = centerChunkPos + glm::ivec3(x, 0, z);
 
@@ -259,10 +259,10 @@ void World::loadChunksAroundPosition(const glm::ivec3& centerChunkPos) {
                 m_chunks[chunkPos] = std::move(chunk);
 
                 {
-                    std::lock_guard<std::mutex> lock(m_generationQueueMutex);
-                    m_generationQueue.push({chunkPos, chunkPtr});
+                    std::lock_guard<std::mutex> lock(generationQueueMutex);
+                    generationQueue.push({chunkPos, chunkPtr});
                 }
-                m_generationQueueCV.notify_one();
+                generationQueueCV.notify_one();
             }
         }
     }
@@ -278,7 +278,7 @@ void World::unloadDistantChunks(const glm::ivec3& centerChunkPos) {
         glm::ivec3 diff = chunkPos - centerChunkPos;
         float distance = std::sqrt(diff.x * diff.x + diff.z * diff.z);
 
-        if (distance > m_renderDistance + 2) {
+        if (distance > renderDistance + 2) {
             Chunk* chunk = pair.second.get();
             ChunkState state = chunk->getState();
 

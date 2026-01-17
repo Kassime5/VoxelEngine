@@ -66,7 +66,7 @@ public:
     glm::vec2 getAtlasUV(int tileX, int tileY, int tilesPerRow, float u, float v) const;
 
 private:
-    bool m_hasMipmaps;
+    bool hasMipmaps;
 
     void cleanup();
     GLenum determineFormat(int channels) const;

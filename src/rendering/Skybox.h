@@ -20,9 +20,9 @@ public:
     void draw(const glm::mat4& view, const glm::mat4& projection);
 
 private:
-    unsigned int m_VAO, m_VBO;
-    unsigned int m_textureID;
-    Shader m_shader;
+    unsigned int VAO, VBO;
+    unsigned int textureID;
+    Shader shader;
 
     void setupMesh();
     unsigned int loadCubemap(const std::vector<std::string>& faces);
