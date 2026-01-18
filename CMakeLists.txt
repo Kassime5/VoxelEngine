@@ -55,7 +55,10 @@ add_executable(GLFWVoxel main.cpp
         src/rendering/Skybox.cpp
         src/rendering/Skybox.h
         src/rendering/ShaderManager.cpp
-        src/rendering/ShaderManager.h)
+        src/rendering/ShaderManager.h
+        src/world/Biome.h
+        src/world/WorleyBiome.cpp
+        src/world/WorleyBiome.h)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 

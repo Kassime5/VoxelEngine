@@ -57,23 +57,27 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
     chunkDirty = true;
 }
 
-void Chunk::generate(const siv::PerlinNoise* perlinNoise) {
+void Chunk::generate(const siv::PerlinNoise* perlinNoise, const WorleyBiome* worleyGenerator) {
     for (int x = 0; x < SIZE; x++) {
         for (int z = 0; z < SIZE; z++) {
             int worldX = chunkPosition.x * SIZE + x;
             int worldZ = chunkPosition.z * SIZE + z;
 
-            double noise = perlinNoise->octave2D_01(worldX * 0.01, worldZ * 0.01, 4);
-            float height = 16.0f + static_cast<float>(noise) * 32.0f;
+            float height = worleyGenerator->getBlendedHeight(worldX, worldZ, perlinNoise);
             int terrainHeight = static_cast<int>(height);
+
+            // Get the biome config
+            const BiomeConfig& closestConfig = worleyGenerator->getConfigAt(worldX, worldZ);
 
             for (int y = 0; y < HEIGHT; y++) {
                 if (y < terrainHeight - 3) {
-                    chunkBlocks[x][y][z] = BlockType::Stone;
+                    chunkBlocks[x][y][z] = closestConfig.stoneBlock;
                 } else if (y < terrainHeight - 1) {
-                    chunkBlocks[x][y][z] = BlockType::Dirt;
+                    chunkBlocks[x][y][z] = closestConfig.subSurfaceBlock;
                 } else if (y < terrainHeight) {
-                    chunkBlocks[x][y][z] = BlockType::Grass;
+                    chunkBlocks[x][y][z] = closestConfig.surfaceBlock;
+                } else {
+                    chunkBlocks[x][y][z] = BlockType::Air;
                 }
             }
         }

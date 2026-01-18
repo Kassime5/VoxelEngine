@@ -55,6 +55,12 @@ BlockTexture TextureAtlas::getBlockTexture(BlockType block) const {
             tex.bottomTile = 5;
             break;
 
+        case BlockType::Snow:
+            tex.topTile = 6;
+            tex.sideTile = 6;
+            tex.bottomTile = 6;
+            break;
+
         default:
             tex.topTile = 0;
             tex.sideTile = 0;

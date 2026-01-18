@@ -11,7 +11,8 @@ enum class BlockType : uint8_t {
     Grass,
     Dirt,
     Stone,
-    Sand
+    Sand,
+    Snow
 };
 
 inline bool isBlockOpaque(BlockType type) {

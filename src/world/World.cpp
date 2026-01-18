@@ -11,11 +11,13 @@
 World::World()
     : renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
       seed(1010), perlinNoise(seed), stopThreads(false) {
+    worleyGenerator = new WorleyBiome(seed, 128);
     initThreadPool(4, 4);
 }
 
 World::~World() {
     shutdownThreadPool();
+    delete worleyGenerator;
 }
 
 void World::initThreadPool(int _generationThreads, int _meshThreads) {
@@ -66,7 +68,7 @@ void World::generationWorkerThread() {
 
         if (isChunkLoaded(task.chunkPos)) {
             task.chunk->setState(ChunkState::Generating);
-            task.chunk->generate(&perlinNoise);
+            task.chunk->generate(&perlinNoise, worleyGenerator);
 
             if (isChunkLoaded(task.chunkPos)) {
                 std::lock_guard<std::mutex> lock(meshBuildQueueMutex);

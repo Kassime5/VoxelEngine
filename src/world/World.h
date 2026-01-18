@@ -18,6 +18,8 @@
 #include <condition_variable>
 #include <atomic>
 #include <glm/glm.hpp>
+
+#include "WorleyBiome.h"
 #include "PerlinNoise/PerlinNoise.hpp"
 #include "../rendering/Profiler.h"
 
@@ -93,6 +95,7 @@ private:
     // Noise
     const siv::PerlinNoise::seed_type seed;
     const siv::PerlinNoise perlinNoise;
+    WorleyBiome* worleyGenerator;
 
     glm::ivec3 worldToChunkPos(int worldX, int worldY, int worldZ) const;
     glm::ivec3 worldToLocalPos(int worldX, int worldY, int worldZ) const;

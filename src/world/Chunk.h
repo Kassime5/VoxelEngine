@@ -11,6 +11,7 @@
 #include "../rendering/Mesh.h"
 #include "../rendering/TextureAltas.h"
 #include "Block.h"
+#include "WorleyBiome.h"
 #include "PerlinNoise/PerlinNoise.hpp"
 
 class TextureAtlas;
@@ -53,7 +54,7 @@ public:
     Chunk(const glm::ivec3& position);
     ~Chunk() = default;
 
-    void generate(const siv::PerlinNoise* perlinNoise = nullptr);
+    void generate(const siv::PerlinNoise* perlinNoise, const WorleyBiome* worleyGenerator);
     void buildMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
     void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas, World *world, int axis);
     void uploadMeshToGPU(const MeshData& meshData);
