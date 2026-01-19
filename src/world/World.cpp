@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include "src/debug/RenderStats.h"
+#include "src/rendering/Camera.h"
 
 World::World()
     : renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
@@ -298,6 +299,10 @@ void World::unloadDistantChunks(const glm::ivec3& centerChunkPos) {
 
 bool World::isChunkLoaded(const glm::ivec3& chunkPos) const {
     return m_chunks.find(chunkPos) != m_chunks.end();
+}
+
+BiomeType World::getCurrentPlayerBiome(float cameraX, float cameraZ) {
+    return worleyGenerator->getBiomeAt(cameraX, cameraZ);
 }
 
 void World::printDebugInfo() const {

@@ -15,12 +15,22 @@ enum class BiomeType : uint8_t {
     Ocean
 };
 
+inline const char* biomeTypeToString(BiomeType type) {
+    switch (type) {
+    case BiomeType::Forest:   return "Forest";
+    case BiomeType::Desert:   return "Desert";
+    case BiomeType::Mountain: return "Mountain";
+    case BiomeType::Ocean:    return "Ocean";
+    default:                  return "Unknown";
+    }
+}
+
 struct BiomeConfig {
     float heightOffset;
     float heightScale;
-
-    // TODO: Use
     float temperature;
+    float weight;
+
     BlockType surfaceBlock;
     BlockType subSurfaceBlock;
     BlockType stoneBlock;

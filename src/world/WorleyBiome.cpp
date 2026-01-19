@@ -14,21 +14,25 @@ WorleyBiome::WorleyBiome(uint32_t seed, int regionSize)
     biomeConfigs[(int) BiomeType::Forest] = {
         16.0f,32.0f,
         0.0f,
+        100.0f,
         BlockType::Grass,BlockType::Dirt,BlockType::Stone
     };
     biomeConfigs[(int) BiomeType::Desert] = {
         10.0f, 10.0f,
         0.0f,
+        10.0f,
         BlockType::Sand, BlockType::Sand, BlockType::Stone
     };
     biomeConfigs[(int) BiomeType::Mountain] = {
         20.0f, 80.0f,
         0.0f,
+        50.0f,
         BlockType::Snow, BlockType::Stone, BlockType::Stone
     };
     biomeConfigs[(int) BiomeType::Ocean] = {
         5.0f, 5.0f,
         0.0f,
+        10.0f,
         BlockType::Sand, BlockType::Sand, BlockType::Stone
     };
 }
@@ -54,9 +58,17 @@ glm::vec2 WorleyBiome::getFeaturePoint(int gridX, int gridZ) const {
     );
 }
 
-BiomeType WorleyBiome::getBiomeForPoint(int gridX, int gridZ) const {
-    float val = hash(gridX + 123, gridZ - 456) * biomeConfigs.size();
-    return static_cast<BiomeType>(std::floor(val));
+BiomeType WorleyBiome::getBiomeForPoint(int gridX, int gridZ, float biomeWeight) const {
+    float val = hash(gridX + 123, gridZ - 456) * biomeWeight;
+
+    float cumulative = 0.0f;
+    for (size_t i = 0; i < biomeConfigs.size(); ++i) {
+        cumulative += biomeConfigs[i].weight;
+        if (val < cumulative) {
+            return static_cast<BiomeType>(i);
+        }
+    }
+    return static_cast<BiomeType>(biomeConfigs.size() - 1);
 }
 
 BiomeType WorleyBiome::getBiomeAt(int x, int z) const {
@@ -66,21 +78,22 @@ BiomeType WorleyBiome::getBiomeAt(int x, int z) const {
     float minDist = 1e9;
     BiomeType closestBiome = BiomeType::Forest;
 
-    // Check current cell and adjacent neighbors
-    for (int i = -1; i <= 1; ++i) {
-        for (int j = -1; j <= 1; ++j) {
+    float totalWeight = getTotalBiomeWeight();
+    for (int i = -2; i <= 2; ++i) {
+        for (int j = -2; j <= 2; ++j) {
             glm::vec2 point = getFeaturePoint(gridX + i, gridZ + j);
             float dist = glm::distance(point, glm::vec2(x, z));
 
             if (dist < minDist) {
                 minDist = dist;
-                closestBiome = getBiomeForPoint(gridX + i, gridZ + j);
+                closestBiome = getBiomeForPoint(gridX + i, gridZ + j, totalWeight);
             }
         }
     }
 
     return closestBiome;
 }
+
 const BiomeConfig& WorleyBiome::getConfigAt(int x, int z) const {
     return biomeConfigs[static_cast<int>(getBiomeAt(x, z))];
 }
@@ -91,21 +104,21 @@ float WorleyBiome::getBlendedHeight(int x, int z, const siv::PerlinNoise* perlin
 
     float totalHeight = 0.0f;
     float totalWeight = 0.0f;
+    float biomeWeight = getTotalBiomeWeight();
 
-    // Sample all 9 neighboring feature points
-    for (int i = -1; i <= 1; ++i) {
-        for (int j = -1; j <= 1; ++j) {
+    double baseNoise = perlin->octave2D_01(x * 0.01, z * 0.01, 4);
+    for (int i = -2; i <= 2; ++i) {
+        for (int j = -2; j <= 2; ++j) {
             glm::vec2 point = getFeaturePoint(gridX + i, gridZ + j);
             float dist = glm::distance(point, glm::vec2(x, z));
 
-            // Calculate a weight that drops off with distance
-            float weight = 1.0f / (std::pow(dist, 3.0f) + 0.0001f);
+            // Smoother falloff
+            float weight = 1.0f / (std::pow(dist, 2.0f) + 1.0f);
 
-            BiomeType type = getBiomeForPoint(gridX + i, gridZ + j);
+            BiomeType type = getBiomeForPoint(gridX + i, gridZ + j, biomeWeight);
             const BiomeConfig& config = biomeConfigs[(int)type];
 
-            double noise = perlin->octave2D_01(x * 0.01, z * 0.01, 4);
-            float height = config.heightOffset + static_cast<float>(noise) * config.heightScale;
+            float height = config.heightOffset + static_cast<float>(baseNoise) * config.heightScale;
 
             totalHeight += height * weight;
             totalWeight += weight;
@@ -113,4 +126,12 @@ float WorleyBiome::getBlendedHeight(int x, int z, const siv::PerlinNoise* perlin
     }
 
     return totalHeight / totalWeight;
+}
+
+float WorleyBiome::getTotalBiomeWeight() const {
+    float totalWeight = 0.0f;
+    for (const auto& biome : biomeConfigs) {
+        totalWeight += biome.weight;
+    }
+    return totalWeight;
 }

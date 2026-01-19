@@ -24,7 +24,6 @@ void Camera::ProcessMouseMovement(float xoffset, float yoffset, GLboolean constr
     Yaw   += xoffset;
     Pitch += yoffset;
 
-    // make sure that when pitch is out of bounds, screen doesn't get flipped
     if (constrainPitch)
     {
         if (Pitch > 89.0f)
@@ -33,7 +32,11 @@ void Camera::ProcessMouseMovement(float xoffset, float yoffset, GLboolean constr
             Pitch = -89.0f;
     }
 
-    // update Front, Right and Up Vectors using the updated Euler angles
+    if (Yaw > 180.0f)
+        Yaw -= 360.0f;
+    if (Yaw < 0.0f)
+        Yaw += 360.0f;
+
     updateCameraVectors();
 }
 
@@ -56,4 +59,22 @@ void Camera::updateCameraVectors() {
     Right = glm::normalize(glm::cross(Front, WorldUp));
     // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
     Up = glm::normalize(glm::cross(Right, Front));
+}
+
+std::string Camera::facingCardinalDirection(){
+    if (Yaw >= 337.5f || Yaw < 22.5f)
+        return "North";
+    if (Yaw >= 22.5f && Yaw < 67.5f)
+        return "North-East";
+    if (Yaw >= 67.5f && Yaw < 112.5f)
+        return "East";
+    if (Yaw >= 112.5f && Yaw < 157.5f)
+        return "South-East";
+    if (Yaw >= 157.5f && Yaw < 202.5f)
+        return "South";
+    if (Yaw >= 202.5f && Yaw < 247.5f)
+        return "South-West";
+    if (Yaw >= 247.5f && Yaw < 292.5f)
+        return "West";
+    return "North-West";
 }

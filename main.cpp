@@ -12,6 +12,8 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+
+#include "src/core/ImGUIManager.h"
 #include "src/debug/RenderStats.h"
 #include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
@@ -32,8 +34,6 @@ bool vsync = false;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 int renderDistance = 8;
-
-bool wireframe = false;
 
 // Camera variables
 Camera camera(glm::vec3(0.0f, 100.0f, 0.0f));
@@ -116,6 +116,7 @@ int main() {
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(*window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
+    ImGUIManager* imGUIManager = new ImGUIManager(world, &camera, &renderDistance);
 
     int frameCount = 0;
 
@@ -153,59 +154,7 @@ int main() {
 
         skybox.draw(camera.GetViewMatrix(), projection);
 
-
-        // ImGUI Rendering
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
-        // Main debug window
-        ImGui::Begin("Debug Info");
-
-        // Performance stats
-        ImGui::SeparatorText("Performance");
-        ImGui::Text("FPS: %.1f", 1.0f / deltaTime);
-        ImGui::Text("Frame Time: %.3f ms", deltaTime * 1000.0f);
-
-        // Rendering stats
-        ImGui::SeparatorText("Rendering");
-        auto& stats = RenderStats::getInstance();
-        ImGui::Text("Draw Calls: %d", stats.getDrawCalls());
-        ImGui::Text("Triangles: %s", formatNumber(stats.getTriangles()).c_str());
-        ImGui::Text("Vertices: %s", formatNumber(stats.getVertices()).c_str());
-        ImGui::Text("Avg Tri/Draw: %.1f", stats.getAvgTrianglesPerDrawCall());
-
-        // Chunk stats
-        ImGui::SeparatorText("Chunks");
-        ImGui::Text("Rendered: %d", stats.getChunksRendered());
-        ImGui::Text("Skipped: %d", stats.getChunksSkipped());
-        ImGui::Text("Total Loaded: %d", world->getLoadedChunkCount());
-
-        // Memory estimate
-        ImGui::SeparatorText("Memory (Estimate)");
-        float vertexMemoryMB = (stats.getVertices() * sizeof(Vertex)) / (1024.0f * 1024.0f);
-        float indexMemoryMB = (stats.getTriangles() * 3 * sizeof(unsigned int)) / (1024.0f * 1024.0f);
-        ImGui::Text("Vertex Data: %.2f MB", vertexMemoryMB);
-        ImGui::Text("Index Data: %.2f MB", indexMemoryMB);
-        ImGui::Text("Total GPU: %.2f MB", vertexMemoryMB + indexMemoryMB);
-
-        // Settings
-        ImGui::SeparatorText("Settings");
-        if (ImGui::SliderInt("Render Distance", &renderDistance, 2, 32)) {
-            world->setRenderDistance(renderDistance);
-        }
-
-        ImGui::Checkbox("Wireframe", &wireframe);
-        if (wireframe) {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        } else {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        }
-
-        ImGui::End();
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        // ---
+        imGUIManager->drawImGUIElements(deltaTime);
 
         // TODO: Change this part
         world->setRenderDistance(renderDistance);
@@ -261,11 +210,6 @@ void processInput(GLFWwindow *window, World *world) {
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, sprinting, deltaTime);
 
-    if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) {
-        wireframe = !wireframe;
-        glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
-    }
-
     if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
         std::cout << camera.Position.x << "-" << camera.Position.y << "-" << camera.Position.z << std::endl;
         BlockType type = world->getBlock(camera.Position.x, camera.Position.y, camera.Position.z);
@@ -314,15 +258,5 @@ void initializeShaders() {
                            "assets/shader/skybox/skybox_fragment.shader");
     sm.addShader("terrain", "assets/shader/terrain/terrain_vertex.shader",
                             "assets/shader/terrain/terrain_fragment.shader");
-}
-
-std::string formatNumber(int number) {
-    std::string str = std::to_string(number);
-    int insertPosition = str.length() - 3;
-    while (insertPosition > 0) {
-        str.insert(insertPosition, ",");
-        insertPosition -= 3;
-    }
-    return str;
 }
 

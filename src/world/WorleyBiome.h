@@ -28,6 +28,7 @@ public:
     BiomeType getBiomeAt(int x, int z) const;
     const BiomeConfig& getConfigAt(int x, int z) const;
     float getBlendedHeight(int x, int z, const siv::PerlinNoise* perlin) const;
+    float getTotalBiomeWeight() const;
 
 private:
     uint32_t seed;
@@ -36,7 +37,7 @@ private:
 
     float hash(int x, int z) const;
     glm::vec2 getFeaturePoint(int gridX, int gridZ) const;
-    BiomeType getBiomeForPoint(int gridX, int gridZ) const;
+    BiomeType getBiomeForPoint(int gridX, int gridZ, float biomeWeight) const;
 };
 
 

@@ -61,6 +61,7 @@ public:
     int getRenderDistance() const { return renderDistance; }
     int getLoadedChunkCount() const { return m_chunks.size(); }
     void printDebugInfo() const;
+    BiomeType getCurrentPlayerBiome(float cameraX, float cameraZ);
 
 private:
     std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash> m_chunks;
