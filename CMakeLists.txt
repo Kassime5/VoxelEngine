@@ -60,7 +60,8 @@ add_executable(GLFWVoxel main.cpp
         src/world/WorleyBiome.cpp
         src/world/WorleyBiome.h
         src/core/ImGUIManager.cpp
-        src/core/ImGUIManager.h)
+        src/core/ImGUIManager.h
+        src/world/Biome.cpp)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 

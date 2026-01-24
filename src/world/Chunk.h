@@ -8,9 +8,11 @@
 #include <glm/glm.hpp>
 #include <atomic>
 #include <mutex>
+#include <optional>
 #include "../rendering/Mesh.h"
 #include "../rendering/TextureAltas.h"
 #include "Block.h"
+#include "Biome.h"
 #include "WorleyBiome.h"
 #include "PerlinNoise/PerlinNoise.hpp"
 
@@ -40,12 +42,6 @@ struct MeshData {
     }
 };
 
-struct QuadMask {
-    BlockType blockType;
-    int width;
-    int height;
-};
-
 class Chunk {
 public:
     static constexpr int SIZE = 64;
@@ -54,7 +50,8 @@ public:
     Chunk(const glm::ivec3& position);
     ~Chunk() = default;
 
-    void generate(const siv::PerlinNoise* perlinNoise, const WorleyBiome* worleyGenerator);
+    void generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
+
     void buildMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
     void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas, World *world, int axis);
     void uploadMeshToGPU(const MeshData& meshData);
@@ -70,12 +67,19 @@ public:
 
     BlockType getBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockType type);
+
+    int getTerrainHeight(int localX, int localZ) const;
 private:
     glm::ivec3 chunkPosition;
     BlockType chunkBlocks[SIZE][HEIGHT][SIZE];
     Mesh chunkMesh;
     bool chunkDirty;
     std::atomic<ChunkState> chunkState;
+    std::optional<glm::ivec3> structureSpawnPoint;
+
+    void generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
+    void decorateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
+    void placeStructures(WorleyBiome* worleyBiome);
 
     bool isBlockAt(int x, int y, int z) const;
     bool shouldRenderFace(int x, int y, int z, int nx, int ny, int nz, World *world) const;

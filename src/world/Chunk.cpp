@@ -57,33 +57,114 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
     chunkDirty = true;
 }
 
-void Chunk::generate(const siv::PerlinNoise* perlinNoise, const WorleyBiome* worleyGenerator) {
+void Chunk::generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
+    generateTerrain(perlinNoise, worleyBiome);
+    decorateTerrain(perlinNoise, worleyBiome);
+
+    chunkDirty = true;
+    chunkState.store(ChunkState::Generated);
+}
+
+void Chunk::generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
     for (int x = 0; x < SIZE; x++) {
         for (int z = 0; z < SIZE; z++) {
             int worldX = chunkPosition.x * SIZE + x;
             int worldZ = chunkPosition.z * SIZE + z;
+            const Biome* biome = worleyBiome->getBiomeAt(worldX, worldZ);
 
-            float height = worleyGenerator->getBlendedHeight(worldX, worldZ, perlinNoise);
+            float height = worleyBiome->getBlendedHeight(worldX, worldZ, perlinNoise);
             int terrainHeight = static_cast<int>(height);
 
-            // Get the biome config
-            const BiomeConfig& closestConfig = worleyGenerator->getConfigAt(worldX, worldZ);
+            int surfaceDepth = biome->getSurfaceDepth();
+            int subSurfaceDepth = biome->getSubSurfaceDepth();
 
             for (int y = 0; y < HEIGHT; y++) {
-                if (y < terrainHeight - 3) {
-                    chunkBlocks[x][y][z] = closestConfig.stoneBlock;
-                } else if (y < terrainHeight - 1) {
-                    chunkBlocks[x][y][z] = closestConfig.subSurfaceBlock;
-                } else if (y < terrainHeight) {
-                    chunkBlocks[x][y][z] = closestConfig.surfaceBlock;
-                } else {
+                if (y < terrainHeight - surfaceDepth - subSurfaceDepth) {
+                    chunkBlocks[x][y][z] = biome->getStoneBlock(worldX, y, worldZ);
+                }
+                else if (y < terrainHeight - surfaceDepth) {
+                    chunkBlocks[x][y][z] = biome->getSubSurfaceBlock(worldX, y, worldZ);
+                }
+                else if (y < terrainHeight) {
+                    chunkBlocks[x][y][z] = biome->getSurfaceBlock(worldX, y, worldZ);
+                }
+                else if (y < biome->getWaterLevel()) {
+                    chunkBlocks[x][y][z] = BlockType::Air; // TODO: Water
+                }
+                else {
                     chunkBlocks[x][y][z] = BlockType::Air;
                 }
             }
         }
     }
-    chunkDirty = true;
-    chunkState.store(ChunkState::Generated);
+}
+
+void Chunk::decorateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
+    for (int x = 0; x < SIZE; x++) {
+        for (int z = 0; z < SIZE; z++) {
+            int surfaceY = getTerrainHeight(x, z);
+
+            if (surfaceY > 0 && surfaceY < HEIGHT) {
+                uint32_t seed = chunkPosition.x * 73856093 + chunkPosition.z * 19349663 +
+                               x * 8191 + z * 131071;
+
+                int worldX = chunkPosition.x * SIZE + x;
+                int worldZ = chunkPosition.z * SIZE + z;
+
+                const Biome* biome = worleyBiome->getBiomeAt(worldX, worldZ);
+                biome->decorate(this, x, z, surfaceY, perlinNoise, seed);
+            }
+        }
+    }
+}
+
+void Chunk::placeStructures(WorleyBiome* worleyBiome) {
+    // if (!structureSpawnPoint.has_value())
+    //     return;
+    //
+    // const Biome* dominantBiome = cachedBiomeData.getDominantBiome();
+    // if (!dominantBiome || !dominantBiome->canSpawnStructures())
+    //     return;
+    //
+    // auto structures = dominantBiome->getStructures();
+    // if (structures.empty())
+    //     return;
+    //
+    // // TODO: Selection logic
+    // const Structure& structure = structures[0];
+    //
+    // glm::ivec3 pos = structureSpawnPoint.value();
+    //
+    // for (int x = 0; x < structure.size.x; x++) {
+    //     for (int y = 0; y < structure.size.y; y++) {
+    //         for (int z = 0; z < structure.size.z; z++) {
+    //             BlockType block = structure.getBlock(x, y, z);
+    //
+    //             if (block != BlockType::Air) {
+    //                 int localX = pos.x + x - structure.anchor.x;
+    //                 int localY = pos.y + y - structure.anchor.y;
+    //                 int localZ = pos.z + z - structure.anchor.z;
+    //
+    //                 // Only place if within chunk bounds
+    //                 if (localX >= 0 && localX < SIZE &&
+    //                     localY >= 0 && localY < HEIGHT &&
+    //                     localZ >= 0 && localZ < SIZE) {
+    //                     setBlock(localX, localY, localZ, block);
+    //                 }
+    //                 // TODO: For large structures, could store cross-chunk data
+    //             }
+    //         }
+    //     }
+    // }
+}
+
+int Chunk::getTerrainHeight(int localX, int localZ) const {
+    for (int y = HEIGHT - 1; y >= 0; y--) {
+        if (getBlock(localX, y, localZ) == BlockType::Grass || getBlock(localX, y, localZ) == BlockType::Sand) {
+            return y + 1; // Return top of terrain
+        }
+    }
+    return 0;
 }
 
 void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *world) {
@@ -139,11 +220,28 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World 
                     getBlock(x[0] + q[0], x[1] + q[1], x[2] + q[2]) : BlockType::Air;
 
                 // Check neighbor chunks if at boundary
-                if (x[axis] == chunkSize[axis] - 1 && world) {
-                    int worldX = chunkPosition.x * SIZE + x[0] + q[0];
-                    int worldY = x[1] + q[1];
-                    int worldZ = chunkPosition.z * SIZE + x[2] + q[2];
-                    blockNext = world->getBlock(worldX, worldY, worldZ);
+                if (world) {
+                    // Check at the far boundary
+                    if (x[axis] == chunkSize[axis] - 1) {
+                        int worldX = chunkPosition.x * SIZE + x[0] + q[0];
+                        int worldY = x[1] + q[1];
+                        int worldZ = chunkPosition.z * SIZE + x[2] + q[2];
+                        blockNext = world->getBlock(worldX, worldY, worldZ);
+                    }
+                    // Also check at the near boundary (when x[axis] == -1)
+                    else if (x[axis] == -1) {
+                        int worldX = chunkPosition.x * SIZE + x[0];
+                        int worldY = x[1];
+                        int worldZ = chunkPosition.z * SIZE + x[2];
+                        blockCurrent = world->getBlock(worldX, worldY, worldZ);
+                    }
+                }
+
+                if (getBlockRenderType(blockCurrent) == BlockRenderType::CrossModel) {
+                    blockCurrent = BlockType::Air;
+                }
+                if (getBlockRenderType(blockNext) == BlockRenderType::CrossModel) {
+                    blockNext = BlockType::Air;
                 }
 
                 // Check if we need to render a face here

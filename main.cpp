@@ -33,7 +33,7 @@ bool vsync = false;
 // Engine variables
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
-int renderDistance = 8;
+int renderDistance = 12;
 
 // Camera variables
 Camera camera(glm::vec3(0.0f, 100.0f, 0.0f));

@@ -36,31 +36,41 @@ BlockTexture TextureAtlas::getBlockTexture(BlockType block) const {
             tex.sideTile = 2;
             tex.bottomTile = 3;
             break;
-
         case BlockType::Dirt:
             tex.topTile = 3;
             tex.sideTile = 3;
             tex.bottomTile = 3;
             break;
-
         case BlockType::Stone:
             tex.topTile = 4;
             tex.sideTile = 4;
             tex.bottomTile = 4;
             break;
-
         case BlockType::Sand:
             tex.topTile = 5;
             tex.sideTile = 5;
             tex.bottomTile = 5;
             break;
-
         case BlockType::Snow:
             tex.topTile = 6;
             tex.sideTile = 6;
             tex.bottomTile = 6;
             break;
-
+        case BlockType::Leaves:
+            tex.topTile = 7;
+            tex.sideTile = 7;
+            tex.bottomTile = 7;
+            break;
+        case BlockType::Wood:
+            tex.topTile = 9;
+            tex.sideTile = 8;
+            tex.bottomTile = 9;
+            break;
+        case BlockType::TallGrass:
+            tex.topTile = 10;
+            tex.sideTile = 10;
+            tex.bottomTile = 10;
+            break;
         default:
             tex.topTile = 0;
             tex.sideTile = 0;

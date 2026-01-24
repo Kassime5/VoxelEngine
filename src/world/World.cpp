@@ -12,13 +12,13 @@
 World::World()
     : renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
       seed(1010), perlinNoise(seed), stopThreads(false) {
-    worleyGenerator = new WorleyBiome(seed, 128);
+    worleyBiome = new WorleyBiome(seed, 512);
     initThreadPool(4, 4);
 }
 
 World::~World() {
     shutdownThreadPool();
-    delete worleyGenerator;
+    delete worleyBiome;
 }
 
 void World::initThreadPool(int _generationThreads, int _meshThreads) {
@@ -69,7 +69,7 @@ void World::generationWorkerThread() {
 
         if (isChunkLoaded(task.chunkPos)) {
             task.chunk->setState(ChunkState::Generating);
-            task.chunk->generate(&perlinNoise, worleyGenerator);
+            task.chunk->generate(&perlinNoise, worleyBiome);
 
             if (isChunkLoaded(task.chunkPos)) {
                 std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
@@ -176,11 +176,7 @@ void World::render(Shader& shader) {
 
     for (auto& pair : m_chunks) {
         Chunk* chunk = pair.second.get();
-
-        if (chunk->getState() != ChunkState::Ready) {
-            RenderStats::getInstance().addChunkSkipped();
-            continue;
-        }
+        if (chunk->getState() != ChunkState::Ready) continue;
 
         glm::mat4 model = glm::mat4(1.0f);
         glm::vec3 worldPos = glm::vec3(pair.first) * static_cast<float>(Chunk::SIZE);
@@ -188,7 +184,6 @@ void World::render(Shader& shader) {
         shader.setMat4("model", model);
 
         chunk->draw();
-        RenderStats::getInstance().addChunkRendered();
     }
 }
 
@@ -301,8 +296,8 @@ bool World::isChunkLoaded(const glm::ivec3& chunkPos) const {
     return m_chunks.find(chunkPos) != m_chunks.end();
 }
 
-BiomeType World::getCurrentPlayerBiome(float cameraX, float cameraZ) {
-    return worleyGenerator->getBiomeAt(cameraX, cameraZ);
+const Biome* World::getCurrentPlayerBiome(float cameraX, float cameraZ) const {
+    return worleyBiome->getBiomeAt(static_cast<int>(cameraX), static_cast<int>(cameraZ));
 }
 
 void World::printDebugInfo() const {

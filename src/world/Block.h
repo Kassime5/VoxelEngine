@@ -12,8 +12,29 @@ enum class BlockType : uint8_t {
     Dirt,
     Stone,
     Sand,
-    Snow
+    Snow,
+    Wood,
+    Leaves,
+    TallGrass
 };
+
+enum class BlockRenderType : uint8_t {
+    Solid,
+    CrossModel,
+    Transparent
+};
+
+
+inline BlockRenderType getBlockRenderType(BlockType type) {
+    switch (type) {
+    case BlockType::TallGrass:
+        return BlockRenderType::CrossModel;
+    case BlockType::Leaves:
+        return BlockRenderType::Transparent;
+    default:
+        return BlockRenderType::Solid;
+    }
+}
 
 inline bool isBlockOpaque(BlockType type) {
     return type != BlockType::Air;

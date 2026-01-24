@@ -61,7 +61,7 @@ public:
     int getRenderDistance() const { return renderDistance; }
     int getLoadedChunkCount() const { return m_chunks.size(); }
     void printDebugInfo() const;
-    BiomeType getCurrentPlayerBiome(float cameraX, float cameraZ);
+    const Biome* getCurrentPlayerBiome(float cameraX, float cameraZ) const;
 
 private:
     std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash> m_chunks;
@@ -96,7 +96,7 @@ private:
     // Noise
     const siv::PerlinNoise::seed_type seed;
     const siv::PerlinNoise perlinNoise;
-    WorleyBiome* worleyGenerator;
+    WorleyBiome* worleyBiome;
 
     glm::ivec3 worldToChunkPos(int worldX, int worldY, int worldZ) const;
     glm::ivec3 worldToLocalPos(int worldX, int worldY, int worldZ) const;

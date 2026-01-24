@@ -55,7 +55,7 @@ void ImGUIManager::drawImGUIElements(float deltaTime)
         ImGui::SeparatorText("Player");
         ImGui::Text("XYZ: %.1f, %.1f, %.1f", camera->Position.x, camera->Position.y, camera->Position.z);
         ImGui::Text("Facing: %s", camera->facingCardinalDirection().c_str());
-        ImGui::Text("Current Biome: %s", biomeTypeToString(world->getCurrentPlayerBiome(camera->Position.x, camera->Position.z)));
+        ImGui::Text("Current Biome: %s", world->getCurrentPlayerBiome(camera->Position.x, camera->Position.z)->getName().c_str());
 
         // Settings
         ImGui::SeparatorText("Settings");
