@@ -64,7 +64,7 @@ public:
         waterLevel = 32;
         temperature = 1.0f;
         humidity = 0.1f;
-        spawnWeight = 25.0f;
+        spawnWeight = 15.0f;
         surfaceBlock = BlockType::Sand;
         subSurfaceBlock = BlockType::Sand;
         stoneBlock = BlockType::Sand;

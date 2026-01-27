@@ -59,7 +59,7 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
 
 void Chunk::generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
     generateTerrain(perlinNoise, worleyBiome);
-    decorateTerrain(perlinNoise, worleyBiome);
+    // decorateTerrain(perlinNoise, worleyBiome);
 
     chunkDirty = true;
     chunkState.store(ChunkState::Generated);
@@ -161,7 +161,7 @@ void Chunk::placeStructures(WorleyBiome* worleyBiome) {
 int Chunk::getTerrainHeight(int localX, int localZ) const {
     for (int y = HEIGHT - 1; y >= 0; y--) {
         if (getBlock(localX, y, localZ) == BlockType::Grass || getBlock(localX, y, localZ) == BlockType::Sand) {
-            return y + 1; // Return top of terrain
+            return y + 1;
         }
     }
     return 0;
@@ -174,10 +174,9 @@ void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *
     meshData.vertices.reserve(SIZE * SIZE * 4);
     meshData.indices.reserve(SIZE * SIZE * 6);
 
-    // Greedy mesh each axis separately
-    greedyMeshAxis(meshData, atlas, world, 0); // X-axis (YZ plane)
-    greedyMeshAxis(meshData, atlas, world, 1); // Y-axis (XZ plane)
-    greedyMeshAxis(meshData, atlas, world, 2); // Z-axis (XY plane)
+    greedyMeshAxis(meshData, atlas, world, 0);
+    greedyMeshAxis(meshData, atlas, world, 1);
+    greedyMeshAxis(meshData, atlas, world, 2);
 
     chunkState.store(ChunkState::MeshBuilt);
 }

@@ -4,19 +4,6 @@
 
 #include "./Camera.h"
 
-void Camera::ProcessKeyboard(Camera_Movement direction, bool sprinting, float deltaTime) {
-    float velocity = MovementSpeed * deltaTime;
-    velocity = sprinting ? velocity * 5 : velocity;
-    if (direction == FORWARD)
-        Position += Front * velocity;
-    if (direction == BACKWARD)
-        Position -= Front * velocity;
-    if (direction == LEFT)
-        Position -= Right * velocity;
-    if (direction == RIGHT)
-        Position += Right * velocity;
-}
-
 void Camera::ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch) {
     xoffset *= MouseSensitivity;
     yoffset *= MouseSensitivity;

@@ -12,15 +12,19 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include "src/game/Player.h"
+
 class ImGUIManager
 {
 public:
-    ImGUIManager(World* _world, Camera* _camera, int* _renderDistance);
+    ImGUIManager(World* _world, Camera* _camera, int* _renderDistance, Player* _player);
     ~ImGUIManager();
     void drawImGUIElements(float deltaTime);
 private:
     World* world;
     Camera* camera;
+    Player* player;
+
     bool wireframe = false;
     int* renderDistance;
 

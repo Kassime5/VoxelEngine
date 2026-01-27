@@ -11,9 +11,9 @@
 
 World::World()
     : renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
-      seed(1010), perlinNoise(seed), stopThreads(false) {
-    worleyBiome = new WorleyBiome(seed, 512);
-    initThreadPool(4, 4);
+      seed(12345), perlinNoise(seed), stopThreads(false) {
+    worleyBiome = new WorleyBiome(seed, 384);
+    initThreadPool(6, 6);
 }
 
 World::~World() {

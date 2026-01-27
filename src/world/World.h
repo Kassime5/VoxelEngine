@@ -103,8 +103,6 @@ private:
 
     void loadChunksAroundPosition(const glm::ivec3& centerChunkPos);
     void unloadDistantChunks(const glm::ivec3& centerChunkPos);
-
-    // Chunk* createChunk(const glm::ivec3& chunkPos);
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
 };
 

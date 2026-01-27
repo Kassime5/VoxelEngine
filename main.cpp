@@ -15,6 +15,7 @@
 
 #include "src/core/ImGUIManager.h"
 #include "src/debug/RenderStats.h"
+#include "src/game/Player.h"
 #include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
 
@@ -36,7 +37,7 @@ float lastFrame = 0.0f;
 int renderDistance = 12;
 
 // Camera variables
-Camera camera(glm::vec3(0.0f, 100.0f, 0.0f));
+Player player(glm::vec3(0, 100, 0));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -116,7 +117,7 @@ int main() {
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(*window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
-    ImGUIManager* imGUIManager = new ImGUIManager(world, &camera, &renderDistance);
+    ImGUIManager* imGUIManager = new ImGUIManager(world, &player.getCamera(), &renderDistance, &player);
 
     int frameCount = 0;
 
@@ -138,21 +139,23 @@ int main() {
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        world->update(camera.Position);
+        player.update(deltaTime, world);
+        world->update(player.getPosition());
+
         terrainShader->use();
 
-        terrainShader->setVec3("viewPos", camera.Position);
+        terrainShader->setVec3("viewPos", player.getPosition());
 
-        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom),
+        glm::mat4 projection = glm::perspective(glm::radians(player.getCamera().Zoom),
             (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
         terrainShader->setMat4("projection", projection);
 
-        glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 view = player.getCamera().GetViewMatrix();
         terrainShader->setMat4("view", view);
 
         world->render(*terrainShader);
 
-        skybox.draw(camera.GetViewMatrix(), projection);
+        skybox.draw(player.getCamera().GetViewMatrix(), projection);
 
         imGUIManager->drawImGUIElements(deltaTime);
 
@@ -197,28 +200,55 @@ void processInput(GLFWwindow *window, World *world) {
         keyEsc = false;
     }
 
+    static bool keyF = false;
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS && !keyF) {
+        keyF = true;
+        if (player.isFlying()) {
+            player.deactivateFlying();
+        } else {
+            player.activateFlying();
+        }
+    } else if (glfwGetKey(window, GLFW_KEY_F) == GLFW_RELEASE) {
+        keyF = false;
+    }
+
     bool sprinting = false;
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
         sprinting = true;
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.ProcessKeyboard(FORWARD, sprinting, deltaTime);
+        player.processInput(FORWARD, sprinting, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.ProcessKeyboard(BACKWARD, sprinting, deltaTime);
+        player.processInput(BACKWARD, sprinting, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.ProcessKeyboard(LEFT, sprinting, deltaTime);
+        player.processInput(LEFT, sprinting, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.ProcessKeyboard(RIGHT, sprinting, deltaTime);
+        player.processInput(RIGHT, sprinting, deltaTime);
+
+    if (player.isFlying()) {
+        bool ascending = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+        bool descending = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
+        player.processVerticalInput(ascending, descending, deltaTime);
+    } else {
+        // Jump when not flying
+        static bool keySpace = false;
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !keySpace) {
+            keySpace = true;
+            player.jump();
+        } else if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE) {
+            keySpace = false;
+        }
+    }
 
     if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
-        std::cout << camera.Position.x << "-" << camera.Position.y << "-" << camera.Position.z << std::endl;
-        BlockType type = world->getBlock(camera.Position.x, camera.Position.y, camera.Position.z);
+        std::cout << player.getPosition().x << "-" << player.getPosition().y << "-" << player.getPosition().z << std::endl;
+        BlockType type = world->getBlock(player.getPosition().x, player.getPosition().y, player.getPosition().z);
         std::cout << printBlockType(type) << std::endl;
     }
 
     if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !keyC) {
         keyC = true;
-        world->setBlock(camera.Position.x, camera.Position.y, camera.Position.z, BlockType::Grass);
+        world->setBlock(player.getPosition().x, player.getPosition().y, player.getPosition().z, BlockType::Grass);
     } else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
         keyC = false;
     }
@@ -244,12 +274,12 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
     lastX = xpos;
     lastY = ypos;
 
-    camera.ProcessMouseMovement(xoffset, yoffset);
+    player.getCamera().ProcessMouseMovement(xoffset, yoffset);
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    camera.ProcessMouseScroll(static_cast<float>(yoffset));
+    player.getCamera().ProcessMouseScroll(static_cast<float>(yoffset));
 }
 
 void initializeShaders() {

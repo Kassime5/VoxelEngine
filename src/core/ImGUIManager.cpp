@@ -4,12 +4,15 @@
 
 #include "ImGUIManager.h"
 
+#include "src/game/Player.h"
 
-ImGUIManager::ImGUIManager(World* _world, Camera* _camera, int* _renderDistance)
+
+ImGUIManager::ImGUIManager(World* _world, Camera* _camera, int* _renderDistance, Player* _player)
 {
     world = _world;
     camera = _camera;
     renderDistance = _renderDistance;
+    player = _player;
 }
 
 ImGUIManager::~ImGUIManager() {}
