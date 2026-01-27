@@ -99,15 +99,25 @@ public:
 
     float getBaseHeight(int worldX, int worldZ, const siv::PerlinNoise* noise) const {
         float baseNoise = getHeightNoise(worldX, worldZ, noise, 0.008f, 4);
-        return 32.0f + baseNoise * 128.0f;
+        return 38.0f + baseNoise * 128.0f;
     }
 
     BlockType getSurfaceBlock(int worldX, int worldY, int worldZ) const override {
-        if (worldY > 60)
-        {
+        if (worldY > 70) {
             return BlockType::Snow;
         }
-        return BlockType::Stone;
+        if (worldY > 50) {
+            uint32_t hash = ((worldX * 73856093) ^ (worldZ * 19349663) ^ (worldY * 83492791));
+            float variation = (hash % 1000) / 1000.0f;
+
+            float stoneThreshold = (worldY - 50.0f) / 20.0f;
+            stoneThreshold += (variation - 0.5f) * 0.3f;
+            if (stoneThreshold > 0.6f) {
+                return BlockType::Stone;
+            }
+            return BlockType::Grass;
+        }
+        return BlockType::Grass;
     }
 
     int getSurfaceDepth() const override { return 1; }

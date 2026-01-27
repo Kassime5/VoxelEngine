@@ -33,15 +33,15 @@ void Player::update(float deltaTime, World* world) {
     updateCamera();
 }
 
-void Player::processInput(Camera_Movement direction, bool sprinting, float deltaTime) {
-    glm::vec3 front, right;
+void Player::processMovement(bool forward, bool backward, bool left, bool right, bool sprinting, float deltaTime) {
+    glm::vec3 front, rightVec;
 
     if (flying) {
         front = camera.Front;
-        right = camera.Right;
+        rightVec = camera.Right;
     } else {
         front = glm::normalize(glm::vec3(camera.Front.x, 0.0f, camera.Front.z));
-        right = camera.Right;
+        rightVec = camera.Right;
     }
 
     float speed = MOVE_SPEED * (sprinting ? SPRINT_MULTIPLIER : 1.0f);
@@ -51,15 +51,16 @@ void Player::processInput(Camera_Movement direction, bool sprinting, float delta
 
     glm::vec3 moveDir(0.0f);
 
-    if (direction == FORWARD)
+    if (forward)
         moveDir += front;
-    if (direction == BACKWARD)
+    if (backward)
         moveDir -= front;
-    if (direction == LEFT)
-        moveDir -= right;
-    if (direction == RIGHT)
-        moveDir += right;
+    if (left)
+        moveDir -= rightVec;
+    if (right)
+        moveDir += rightVec;
 
+    // Normalize diagonal movement so you don't move faster diagonally
     if (glm::length(moveDir) > 0.0f) {
         moveDir = glm::normalize(moveDir);
     }

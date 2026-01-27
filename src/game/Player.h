@@ -27,7 +27,7 @@ public:
     Player(const glm::vec3& startPosition);
 
     void update(float deltaTime, World* world);
-    void processInput(Camera_Movement direction, bool sprinting, float deltaTime);
+    void processMovement(bool forward, bool backward, bool left, bool right, bool sprinting, float deltaTime);
     void applyFriction(float deltaTime);
     void processVerticalInput(bool ascending, bool descending, float deltaTime);
 
@@ -36,6 +36,8 @@ public:
 
     glm::vec3 getPosition() const { return position; }
     glm::vec3 getVelocity() const { return velocity; }
+    glm::vec3 getFront() const { return camera.Front; }
+    glm::vec3 getUp() const { return camera.Up; }
     bool isOnGround() const { return onGround; }
 
     bool isFlying() const { return flying; }

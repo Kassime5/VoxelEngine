@@ -16,8 +16,11 @@
 #include "src/core/ImGUIManager.h"
 #include "src/debug/RenderStats.h"
 #include "src/game/Player.h"
+#include "src/game/SoundManager.h"
 #include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
+#include "thirdparty/AL/al.h"
+#include "thirdparty/AL/alc.h"
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window, World *world);
@@ -35,14 +38,16 @@ bool vsync = false;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 int renderDistance = 12;
+SoundManager* soundManager;
 
 // Camera variables
-Player player(glm::vec3(0, 100, 0));
+Player player(glm::vec3(0, 300, 0));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 
 bool isCursorVisible = false;
+ALCdevice *device;
 
 
 int main() {
@@ -53,6 +58,15 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     Window *window = new Window(SCR_WIDTH, SCR_HEIGHT, "OpenGL");
+
+    soundManager = new SoundManager(&player);
+    if (!soundManager->initialize()) {
+        std::cerr << "Failed to initialize sound system!" << std::endl;
+    }
+
+    // Sound stuff, TODO: move to a proper game manager
+    ALuint ambianceBuffer = soundManager->loadSound("assets/music/MusicAmbianceMono.wav");
+    soundManager->playSound3D(ambianceBuffer, 0.0f, 55.0f, 0.0f, true, 0.3f);
 
     glfwMakeContextCurrent(*window);
     window->setSwapInterval(vsync ? 1 : 0);
@@ -81,7 +95,6 @@ int main() {
         std::cerr << "Failed to load skybox!" << std::endl;
     }
 
-    // configure global opengl state
     glEnable(GL_DEPTH_TEST);
 
     initializeShaders();
@@ -102,7 +115,7 @@ int main() {
     World* world = new World();
     world->setRenderDistance(renderDistance);
 
-    if (!world->loadTextureAtlas("assets/textures/atlas.png", 8)) {
+    if (!world->loadTextureAtlas("assets/textures/atlas2.png", 8)) {
         std::cerr << "Failed to load texture atlas!" << std::endl;
         return -1;
     }
@@ -141,6 +154,7 @@ int main() {
 
         player.update(deltaTime, world);
         world->update(player.getPosition());
+        soundManager->update();
 
         terrainShader->use();
 
@@ -173,6 +187,8 @@ int main() {
     // glfw: terminate, clearing all previously allocated GLFW resources.
     glfwTerminate();
 
+    soundManager->shutdown();
+    delete soundManager;
     delete window;
     delete world;
 
@@ -216,14 +232,12 @@ void processInput(GLFWwindow *window, World *world) {
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
         sprinting = true;
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        player.processInput(FORWARD, sprinting, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        player.processInput(BACKWARD, sprinting, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        player.processInput(LEFT, sprinting, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        player.processInput(RIGHT, sprinting, deltaTime);
+    bool forward = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+    bool backward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+    bool left = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+    bool right = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+
+    player.processMovement(forward, backward, left, right, sprinting, deltaTime);
 
     if (player.isFlying()) {
         bool ascending = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;

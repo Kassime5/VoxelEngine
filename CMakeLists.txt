@@ -30,6 +30,13 @@ add_library(imgui
         thirdparty/imgui/backends/imgui_impl_opengl3.cpp
 )
 
+#OpenAL
+set(OPENAL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/AL")
+set(OPENAL_LIBRARY "${CMAKE_SOURCE_DIR}/thirdparty/AL/OpenAL32.lib")
+set(OPENAL_DLL "${CMAKE_SOURCE_DIR}/thirdparty/AL/OpenAL32.dll")
+
+include_directories(${OPENAL_INCLUDE_DIR})
+
 add_executable(GLFWVoxel main.cpp
         src/rendering/Shader.cpp
         src/rendering/Shader.h
@@ -63,9 +70,19 @@ add_executable(GLFWVoxel main.cpp
         src/core/ImGUIManager.h
         src/world/Biome.cpp
         src/game/Player.cpp
-        src/game/Player.h)
+        src/game/Player.h
+        src/game/SoundManager.cpp
+        src/game/SoundManager.h)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
+# Copy OpenAL32.dll to build directory
+add_custom_command(TARGET GLFWVoxel POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OPENAL_DLL}"
+        "$<TARGET_FILE_DIR:GLFWVoxel>"
+        COMMENT "Copying OpenAL32.dll to build directory"
+)
 
 target_include_directories(imgui PUBLIC
         thirdparty/imgui
@@ -78,6 +95,7 @@ target_link_libraries(GLFWVoxel PRIVATE
         OpenGL::GL
         glm::glm
         imgui
+        ${OPENAL_LIBRARY}
 )
 
 target_link_libraries(imgui PUBLIC glfw glad)
