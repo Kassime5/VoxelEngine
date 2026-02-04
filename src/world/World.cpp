@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include "src/debug/RenderStats.h"
+#include "src/game/Player.h"
 #include "src/rendering/Camera.h"
 
 World::World()
@@ -171,18 +172,35 @@ void World::update(const glm::vec3& cameraPosition) {
     }
 }
 
-void World::render(Shader& shader) {
+void World::render(Shader& shader, Player* player) {
+    glm::mat4 viewProj = player->getCamera().GetProjectionMatrix() * player->getCamera().GetViewMatrix();
+
+    Frustum frustum;
+    frustum.extractFromMatrix(viewProj);
+
     textureAtlas.bind(0);
+    constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
 
     for (auto& pair : m_chunks) {
         Chunk* chunk = pair.second.get();
-        if (chunk->getState() != ChunkState::Ready) continue;
+        // if (chunk->getState() != ChunkState::Ready) {
+        //     RenderStats::getInstance().addChunkSkipped();
+        //     continue;
+        // }
+
+        glm::vec3 worldPos = glm::vec3(pair.first) * chunkSize;
+        glm::vec3 chunkMin = worldPos;
+        glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize);
+
+        if (!frustum.isBoxInFrustum(chunkMin, chunkMax)) {
+            RenderStats::getInstance().addChunkCulled();
+            continue;
+        }
 
         glm::mat4 model = glm::mat4(1.0f);
-        glm::vec3 worldPos = glm::vec3(pair.first) * static_cast<float>(Chunk::SIZE);
         model = glm::translate(model, worldPos);
         shader.setMat4("model", model);
-
+        RenderStats::getInstance().addChunkRendered();
         chunk->draw();
     }
 }

@@ -457,7 +457,7 @@ void Chunk::addFace(std::vector<Vertex> &vertices, std::vector<unsigned int> &in
 }
 
 void Chunk::draw() const {
-    if (!chunkMesh.isEmpty()) {
-        chunkMesh.draw();
-    }
+    if (chunkMesh.isEmpty()) return;
+
+    chunkMesh.draw();
 }

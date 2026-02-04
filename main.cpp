@@ -167,7 +167,7 @@ int main() {
         glm::mat4 view = player.getCamera().GetViewMatrix();
         terrainShader->setMat4("view", view);
 
-        world->render(*terrainShader);
+        world->render(*terrainShader, &player);
 
         skybox.draw(player.getCamera().GetViewMatrix(), projection);
 

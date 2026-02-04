@@ -44,6 +44,7 @@ void ImGUIManager::drawImGUIElements(float deltaTime)
         ImGui::SeparatorText("Chunks");
         ImGui::Text("Rendered: %d", stats.getChunksRendered());
         ImGui::Text("Skipped: %d", stats.getChunksSkipped());
+        ImGui::Text("Culled: %d", stats.getChunksCulled());
         ImGui::Text("Total Loaded: %d", world->getLoadedChunkCount());
 
         // Memory estimate

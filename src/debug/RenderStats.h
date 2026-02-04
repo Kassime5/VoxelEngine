@@ -19,6 +19,7 @@ public:
         m_vertices = 0;
         m_chunksRendered = 0;
         m_chunksSkipped = 0;
+        m_chunksCulled = 0;
     }
 
     // Increment counters
@@ -27,6 +28,7 @@ public:
     void addVertices(int count) { m_vertices += count; }
     void addChunkRendered() { m_chunksRendered++; }
     void addChunkSkipped() { m_chunksSkipped++; }
+    void addChunkCulled() { m_chunksCulled++; }
 
     // Getters
     int getDrawCalls() const { return m_drawCalls; }
@@ -34,6 +36,7 @@ public:
     int getVertices() const { return m_vertices; }
     int getChunksRendered() const { return m_chunksRendered; }
     int getChunksSkipped() const { return m_chunksSkipped; }
+    int getChunksCulled() const { return m_chunksCulled; }
 
     // Calculate derived stats
     float getAvgTrianglesPerDrawCall() const {
@@ -46,13 +49,14 @@ public:
 
 private:
     RenderStats() : m_drawCalls(0), m_triangles(0), m_vertices(0),
-                    m_chunksRendered(0), m_chunksSkipped(0) {}
+                    m_chunksRendered(0), m_chunksSkipped(0), m_chunksCulled(0) {}
 
     int m_drawCalls;
     int m_triangles;
     int m_vertices;
     int m_chunksRendered;
     int m_chunksSkipped;
+    int m_chunksCulled;
 };
 
 #endif //GLFWVOXEL_RENDERSTATS_H

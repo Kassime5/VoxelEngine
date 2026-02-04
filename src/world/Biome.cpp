@@ -18,7 +18,7 @@ public:
 
     float getBaseHeight(int worldX, int worldZ, const siv::PerlinNoise* noise) const {
         float baseNoise = getHeightNoise(worldX, worldZ, noise, 0.01f, 4);
-        return 16.0f + baseNoise * 32.0f;
+        return 24.0f + baseNoise * 32.0f;
     }
 
     float getStructureSpawnChance() const override { return 0.15f; }
@@ -71,8 +71,8 @@ public:
     }
 
     float getBaseHeight(int worldX, int worldZ, const siv::PerlinNoise* noise) const {
-        float baseNoise = getHeightNoise(worldX, worldZ, noise, 0.02f, 3);
-        return 10.0f + baseNoise * 10.0f;
+        float baseNoise = getHeightNoise(worldX, worldZ, noise, 0.02f, 2);
+        return 24.0f + baseNoise * 2.0f;
     }
 
     int getSubSurfaceDepth() const override { return 5; }
