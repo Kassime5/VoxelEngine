@@ -180,17 +180,13 @@ void World::render(Shader& shader, Player* player) {
 
     textureAtlas.bind(0);
     constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
+    constexpr float chunkHeight = static_cast<float>(Chunk::HEIGHT);
 
     for (auto& pair : m_chunks) {
         Chunk* chunk = pair.second.get();
-        // if (chunk->getState() != ChunkState::Ready) {
-        //     RenderStats::getInstance().addChunkSkipped();
-        //     continue;
-        // }
-
         glm::vec3 worldPos = glm::vec3(pair.first) * chunkSize;
         glm::vec3 chunkMin = worldPos;
-        glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize);
+        glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize, chunkHeight, chunkSize);
 
         if (!frustum.isBoxInFrustum(chunkMin, chunkMax)) {
             RenderStats::getInstance().addChunkCulled();
