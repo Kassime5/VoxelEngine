@@ -16,6 +16,7 @@
 #include "src/core/ImGUIManager.h"
 #include "src/debug/RenderStats.h"
 #include "src/game/Player.h"
+#include "src/game/HighlightBox.h"
 #include "src/game/SoundManager.h"
 #include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
@@ -37,7 +38,7 @@ bool vsync = false;
 // Engine variables
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
-int renderDistance = 12;
+int renderDistance = 8;
 SoundManager* soundManager;
 
 // Camera variables
@@ -48,7 +49,6 @@ bool firstMouse = true;
 
 bool isCursorVisible = false;
 ALCdevice *device;
-
 
 int main() {
     // glfw: initialize and configure
@@ -96,6 +96,8 @@ int main() {
     }
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     initializeShaders();
     Shader* terrainShader = ShaderManager::getInstance().getShader("terrain");
@@ -132,7 +134,11 @@ int main() {
     ImGui_ImplOpenGL3_Init("#version 460");
     ImGUIManager* imGUIManager = new ImGUIManager(world, &player.getCamera(), &renderDistance, &player);
 
+    Shader* selectionShader = ShaderManager::getInstance().getShader("selection");
+
     int frameCount = 0;
+    HighlightBox highlightBox;
+    RaycastResult highlightedBlock;
 
     while (!glfwWindowShouldClose(*window)) {
         float currentFrame = glfwGetTime();
@@ -168,6 +174,30 @@ int main() {
         terrainShader->setMat4("view", view);
 
         world->render(*terrainShader, &player);
+        world->renderTransparent(*terrainShader, &player);
+
+        highlightedBlock = world->raycastBlock(player.getCamera().Position, player.getFront(), 5.0f);
+
+        if (highlightedBlock.hit) {
+            glLineWidth(2.0f);
+            glDisable(GL_DEPTH_TEST);
+
+            selectionShader->use();
+
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, glm::vec3(highlightedBlock.hitPos));
+
+            glm::mat4 viewProj = projection * view;
+
+            selectionShader->setMat4("model", model);
+            selectionShader->setMat4("viewProj", viewProj);
+            selectionShader->setVec3("lineColor", glm::vec3(0.0f, 0.0f, 0.0f));
+
+            highlightBox.draw();
+
+            glEnable(GL_DEPTH_TEST);
+            glLineWidth(1.0f);
+        }
 
         skybox.draw(player.getCamera().GetViewMatrix(), projection);
 
@@ -298,9 +328,15 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 
 void initializeShaders() {
     ShaderManager& sm = ShaderManager::getInstance();
-    sm.addShader("skybox", "assets/shader/skybox/skybox_vertex.shader",
-                           "assets/shader/skybox/skybox_fragment.shader");
-    sm.addShader("terrain", "assets/shader/terrain/terrain_vertex.shader",
-                            "assets/shader/terrain/terrain_fragment.shader");
+    sm.addShader("skybox", "assets/shader/skybox/skybox.vs.glsl",
+                           "assets/shader/skybox/skybox.fs.glsl");
+    sm.addShader("terrain", "assets/shader/terrain/terrain.vs.glsl",
+                            "assets/shader/terrain/terrain.fs.glsl");
+    sm.addShader("selection", "assets/shader/player/selection_box.vs.glsl",
+                            "assets/shader/player/selection_box.fs.glsl");
+}
+
+void drawHighlightBox() {
+
 }
 

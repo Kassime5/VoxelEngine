@@ -99,11 +99,11 @@ void Mesh::setupMesh() {
     glVertexAttribIPointer(3, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, normalId));
     glEnableVertexAttribArray(3);
 
-    // Quad Width (NEW)
+    // Quad Width
     glVertexAttribIPointer(4, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, quadWidth));
     glEnableVertexAttribArray(4);
 
-    // Quad Height (NEW)
+    // Quad Height
     glVertexAttribIPointer(5, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, quadHeight));
     glEnableVertexAttribArray(5);
 
@@ -118,7 +118,6 @@ void Mesh::draw() const {
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 
-    // Track rendering stats
     RenderStats::getInstance().addDrawCall();
     RenderStats::getInstance().addTriangles(indices.size() / 3);
     RenderStats::getInstance().addVertices(vertices.size());
@@ -132,12 +131,4 @@ void Mesh::cleanup() {
         VAO = VBO = EBO = 0;
         initialized = false;
     }
-}
-
-int Mesh::getVertexCount() const {
-    return vertices.size();
-}
-
-int Mesh::getTriangleCount() const {
-    return indices.size() / 3;
 }

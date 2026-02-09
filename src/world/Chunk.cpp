@@ -59,7 +59,7 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
 
 void Chunk::generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
     generateTerrain(perlinNoise, worleyBiome);
-    // decorateTerrain(perlinNoise, worleyBiome);
+    decorateTerrain(perlinNoise, worleyBiome);
 
     chunkDirty = true;
     chunkState.store(ChunkState::Generated);
@@ -179,6 +179,26 @@ void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *
     greedyMeshAxis(meshData, atlas, world, 2);
 
     chunkState.store(ChunkState::MeshBuilt);
+}
+
+void Chunk::buildTransparentMeshData(MeshData& meshData, const TextureAtlas *atlas) {
+    PROFILE_SCOPE("Chunk::buildTransparentMeshData");
+
+    meshData.clear();
+    meshData.vertices.reserve(SIZE * SIZE);
+    meshData.indices.reserve(SIZE * SIZE * 2);
+
+    for (int x = 0; x < SIZE; x++) {
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int z = 0; z < SIZE; z++) {
+                BlockType blockType = getBlock(x, y, z);
+
+                if (getBlockRenderType(blockType) == BlockRenderType::CrossModel) {
+                    addCrossModel(meshData, glm::vec3(x, y, z), blockType, atlas);
+                }
+            }
+        }
+    }
 }
 
 void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World *world, int axis) {
@@ -381,11 +401,58 @@ void Chunk::addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
     }
 }
 
+void Chunk::addCrossModel(MeshData& meshData, const glm::vec3& pos, BlockType blockType,
+                         const TextureAtlas* atlas) {
+    uint8_t tileIndex = atlas->getBlockFaceTileIndex(blockType, BlockFace::Front);
+    uint32_t baseIndex = meshData.vertices.size();
+
+    glm::u8vec3 v1a(static_cast<uint8_t>(pos.x), static_cast<uint8_t>(pos.y), static_cast<uint8_t>(pos.z));
+    glm::u8vec3 v2a(static_cast<uint8_t>(pos.x + 1), static_cast<uint8_t>(pos.y), static_cast<uint8_t>(pos.z + 1));
+    glm::u8vec3 v3a(static_cast<uint8_t>(pos.x + 1), static_cast<uint8_t>(pos.y + 1), static_cast<uint8_t>(pos.z + 1));
+    glm::u8vec3 v4a(static_cast<uint8_t>(pos.x), static_cast<uint8_t>(pos.y + 1), static_cast<uint8_t>(pos.z));
+
+    meshData.vertices.push_back({v1a, tileIndex, 0, 0, 1, 1});
+    meshData.vertices.push_back({v2a, tileIndex, 1, 0, 1, 1});
+    meshData.vertices.push_back({v3a, tileIndex, 2, 0, 1, 1});
+    meshData.vertices.push_back({v4a, tileIndex, 3, 0, 1, 1});
+
+    meshData.indices.push_back(baseIndex + 0);
+    meshData.indices.push_back(baseIndex + 1);
+    meshData.indices.push_back(baseIndex + 2);
+    meshData.indices.push_back(baseIndex + 0);
+    meshData.indices.push_back(baseIndex + 2);
+    meshData.indices.push_back(baseIndex + 3);
+
+    baseIndex = meshData.vertices.size();
+
+    glm::u8vec3 v1b(static_cast<uint8_t>(pos.x + 1), static_cast<uint8_t>(pos.y), static_cast<uint8_t>(pos.z));
+    glm::u8vec3 v2b(static_cast<uint8_t>(pos.x), static_cast<uint8_t>(pos.y), static_cast<uint8_t>(pos.z + 1));
+    glm::u8vec3 v3b(static_cast<uint8_t>(pos.x), static_cast<uint8_t>(pos.y + 1), static_cast<uint8_t>(pos.z + 1));
+    glm::u8vec3 v4b(static_cast<uint8_t>(pos.x + 1), static_cast<uint8_t>(pos.y + 1), static_cast<uint8_t>(pos.z));
+
+    meshData.vertices.push_back({v1b, tileIndex, 0, 0, 1, 1});
+    meshData.vertices.push_back({v2b, tileIndex, 1, 0, 1, 1});
+    meshData.vertices.push_back({v3b, tileIndex, 2, 0, 1, 1});
+    meshData.vertices.push_back({v4b, tileIndex, 3, 0, 1, 1});
+
+    meshData.indices.push_back(baseIndex + 0);
+    meshData.indices.push_back(baseIndex + 1);
+    meshData.indices.push_back(baseIndex + 2);
+    meshData.indices.push_back(baseIndex + 0);
+    meshData.indices.push_back(baseIndex + 2);
+    meshData.indices.push_back(baseIndex + 3);
+}
+
 void Chunk::uploadMeshToGPU(const MeshData& meshData) {
     PROFILE_SCOPE("Chunk::uploadMeshToGPU");
     chunkMesh.setData(meshData.vertices, meshData.indices);
     chunkDirty = false;
     chunkState.store(ChunkState::Ready);
+}
+
+void Chunk::uploadTransparentMeshToGPU(const MeshData& meshData) {
+    PROFILE_SCOPE("Chunk::uploadTransparentMeshToGPU");
+    chunkTransparentMesh.setData(meshData.vertices, meshData.indices);
 }
 
 bool Chunk::isBlockAt(int x, int y, int z) const {
@@ -458,6 +525,10 @@ void Chunk::addFace(std::vector<Vertex> &vertices, std::vector<unsigned int> &in
 
 void Chunk::draw() const {
     if (chunkMesh.isEmpty()) return;
-
     chunkMesh.draw();
+}
+
+void Chunk::drawTransparent() const {
+    if (chunkTransparentMesh.isEmpty()) return;
+    chunkTransparentMesh.draw();
 }

@@ -74,7 +74,7 @@ void World::generationWorkerThread() {
 
             if (isChunkLoaded(task.chunkPos)) {
                 std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
-                meshBuildQueue.push({task.chunk, MeshData()});
+                meshBuildQueue.push({task.chunk, MeshData(), MeshData()});
                 meshBuildQueueCV.notify_one();
             }
         }
@@ -111,6 +111,7 @@ void World::meshBuildWorkerThread() {
         if (currentState == ChunkState::Generated || currentState == ChunkState::BuildingMesh) {
             task.chunk->setState(ChunkState::BuildingMesh);
             task.chunk->buildMeshData(task.meshData, &textureAtlas, this);
+            task.chunk->buildTransparentMeshData(task.transparentMeshData, &textureAtlas);
 
             if (isChunkLoaded(chunkPos)) {
                 task.chunk->setState(ChunkState::MeshBuilt);
@@ -136,6 +137,7 @@ void World::processGPUUploadQueue(int maxPerFrame) {
 
         if (isChunkLoaded(chunkPos) && task.chunk->getState() == ChunkState::MeshBuilt) {
             task.chunk->uploadMeshToGPU(task.meshData);
+            task.chunk->uploadTransparentMeshToGPU(task.transparentMeshData);
             // TODO: Implement proper neighbor remeshing with cycle detection
         }
 
@@ -182,9 +184,8 @@ void World::render(Shader& shader, Player* player) {
     constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
     constexpr float chunkHeight = static_cast<float>(Chunk::HEIGHT);
 
-    for (auto& pair : m_chunks) {
-        Chunk* chunk = pair.second.get();
-        glm::vec3 worldPos = glm::vec3(pair.first) * chunkSize;
+    for (const auto& [chunkPos, chunk] : m_chunks) {
+        glm::vec3 worldPos(chunkPos.x * chunkSize, chunkPos.y, chunkPos.z * chunkSize);
         glm::vec3 chunkMin = worldPos;
         glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize, chunkHeight, chunkSize);
 
@@ -193,9 +194,7 @@ void World::render(Shader& shader, Player* player) {
             continue;
         }
 
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, worldPos);
-        shader.setMat4("model", model);
+        shader.setVec3("chunkOffset", worldPos);
         RenderStats::getInstance().addChunkRendered();
         chunk->draw();
     }
@@ -224,7 +223,7 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
         chunk->markDirty();
         chunk->setState(ChunkState::Generated);
         std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
-        meshBuildQueue.push({chunk, MeshData()});
+        meshBuildQueue.push({chunk, MeshData(), MeshData()});
         meshBuildQueueCV.notify_one();
     }
 }
@@ -312,6 +311,70 @@ bool World::isChunkLoaded(const glm::ivec3& chunkPos) const {
 
 const Biome* World::getCurrentPlayerBiome(float cameraX, float cameraZ) const {
     return worleyBiome->getBiomeAt(static_cast<int>(cameraX), static_cast<int>(cameraZ));
+}
+
+void World::renderTransparent(Shader& shader, Player* player) {
+    glm::mat4 viewProj = player->getCamera().GetProjectionMatrix() * player->getCamera().GetViewMatrix();
+    Frustum frustum;
+    frustum.extractFromMatrix(viewProj);
+
+    // textureAtlas.bind(0);
+    constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
+    constexpr float chunkHeight = static_cast<float>(Chunk::HEIGHT);
+
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
+
+    for (const auto& [chunkPos, chunk] : m_chunks) {
+        if (chunk->isTransparentMeshEmpty())
+            continue;
+
+        glm::vec3 worldPos(chunkPos.x * chunkSize, chunkPos.y, chunkPos.z * chunkSize);
+        glm::vec3 chunkMin = worldPos;
+        glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize, chunkHeight, chunkSize);
+
+        if (!frustum.isBoxInFrustum(chunkMin, chunkMax)) {
+            continue;
+        }
+
+        shader.setVec3("chunkOffset", worldPos);
+        chunk->drawTransparent();
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_CULL_FACE);
+}
+
+RaycastResult World::raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance) {
+    RaycastResult result{false, glm::ivec3(0), glm::ivec3(0)};
+
+    glm::vec3 pos = origin;
+    glm::vec3 step = glm::normalize(direction) * 0.1f;
+
+    float distance = 0.0f;
+    glm::ivec3 lastPos = glm::floor(pos);
+
+    while (distance < maxDistance) {
+        pos += step;
+        distance += 0.1f;
+
+        glm::ivec3 blockPos(std::floor(pos.x), std::floor(pos.y), std::floor(pos.z));
+
+        if (blockPos != lastPos) {
+            BlockType block = getBlock(blockPos.x, blockPos.y, blockPos.z);
+
+            if (block != BlockType::Air) {
+                result.hit = true;
+                result.hitPos = blockPos;
+                result.hitNormal = blockPos - lastPos;
+                return result;
+            }
+
+            lastPos = blockPos;
+        }
+    }
+
+    return result;
 }
 
 void World::printDebugInfo() const {

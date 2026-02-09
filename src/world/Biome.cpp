@@ -24,6 +24,17 @@ public:
     float getStructureSpawnChance() const override { return 0.15f; }
 
     void decorate(Chunk* chunk, int localX, int localZ, int surfaceY, const siv::PerlinNoise* noise, uint32_t seed) const {
+        float grassChance = static_cast<float>((seed ^ 0x54321) % 1000) / 1000.0f;
+        if (grassChance < 0.3f) {
+            if (surfaceY < Chunk::HEIGHT) {
+                BlockType surfaceBlock = chunk->getBlock(localX, surfaceY - 1, localZ);
+                if (surfaceBlock == BlockType::Grass) {
+                    chunk->setBlock(localX, surfaceY, localZ, BlockType::TallGrass);
+                }
+            }
+            return;
+        }
+
         float treeChance = static_cast<float>((seed ^ 0x12345) % 1000) / 1000.0f;
 
         if (treeChance < 0.01f) { // 5% chance for a tree

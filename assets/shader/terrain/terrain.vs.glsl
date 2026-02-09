@@ -28,14 +28,15 @@ out vec3 Normal;
 flat out uint TileIndex;
 out vec2 LocalUV;
 
-uniform mat4 model;
+uniform vec3 chunkOffset;
 uniform mat4 view;
 uniform mat4 projection;
 uniform float tilesPerRow;
 
 void main()
 {
-    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    vec3 worldPos = aPos + chunkOffset;
+    gl_Position = projection * view * vec4(worldPos, 1.0);
 
     // Calculate local UV coordinates scaled by quad dimensions
     vec2 cornerOffset = CORNER_UVS[cornerIndex];
@@ -44,6 +45,6 @@ void main()
     // Pass tile index to fragment shader
     TileIndex = tileIndex;
 
-    FragPos = vec3(model * vec4(aPos, 1.0));
+    FragPos = worldPos;
     Normal = NORMALS[normalId];
 }

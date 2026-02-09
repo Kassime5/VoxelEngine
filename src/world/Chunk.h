@@ -52,10 +52,17 @@ public:
 
     void generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
 
+    // Regular mesh
     void buildMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
     void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas, World *world, int axis);
     void uploadMeshToGPU(const MeshData& meshData);
     void draw() const;
+
+    // Transparent mesh
+    void buildTransparentMeshData(MeshData& meshData, const TextureAtlas* atlas);
+    void uploadTransparentMeshToGPU(const MeshData& meshData);
+    void drawTransparent() const;
+    bool isTransparentMeshEmpty() const { return chunkTransparentMesh.isEmpty(); }
 
     glm::ivec3 getPosition() const { return chunkPosition; }
 
@@ -72,7 +79,10 @@ public:
 private:
     glm::ivec3 chunkPosition;
     BlockType chunkBlocks[SIZE][HEIGHT][SIZE];
+
     Mesh chunkMesh;
+    Mesh chunkTransparentMesh;
+
     bool chunkDirty;
     std::atomic<ChunkState> chunkState;
     std::optional<glm::ivec3> structureSpawnPoint;
@@ -91,6 +101,9 @@ private:
     void addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
                           BlockType block, BlockFace face, const TextureAtlas *atlas,
                           int width, int height);
+
+    void addCrossModel(MeshData& meshData, const glm::vec3& pos, BlockType blockType,
+                  const TextureAtlas* atlas);
 };
 
 

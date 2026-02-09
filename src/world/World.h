@@ -42,6 +42,13 @@ struct ChunkGenerationTask {
 struct ChunkMeshTask {
     Chunk* chunk;
     MeshData meshData;
+    MeshData transparentMeshData;
+};
+
+struct RaycastResult {
+    bool hit;
+    glm::vec3 hitPos;
+    glm::vec3 hitNormal;
 };
 
 class World {
@@ -64,6 +71,8 @@ public:
     int getLoadedChunkCount() const { return m_chunks.size(); }
     void printDebugInfo() const;
     const Biome* getCurrentPlayerBiome(float cameraX, float cameraZ) const;
+    void renderTransparent(Shader& shader, Player* player);
+    RaycastResult raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance = 10.0f);
 
 private:
     std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash> m_chunks;
