@@ -9,6 +9,8 @@
 #include <vector>
 #include <glm/glm.hpp>
 
+class Shader;
+
 class Skybox {
 public:
     Skybox();
@@ -24,7 +26,7 @@ private:
     void setupMesh();
     unsigned int loadCubemap(const std::vector<std::string>& faces);
 
-    static const char* SHADER_NAME;
+    Shader* skyboxShader;
 };
 
 #endif //GLFWVOXEL_SKYBOX_H

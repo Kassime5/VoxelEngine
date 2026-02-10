@@ -2,8 +2,6 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include "src/rendering/Shader.h"
-#include "src/rendering/Camera.h"
 #include "src/world/World.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -27,7 +25,6 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window, World *world);
 void mouse_callback(GLFWwindow *window, double xposIn, double yposIn);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void initializeShaders();
 std::string formatNumber(int number);
 
 // Window Settings
@@ -83,48 +80,19 @@ int main() {
     }
 
     Skybox skybox;
-    std::vector<std::string> faces = {
-        "assets/textures/skybox/right.png",
-        "assets/textures/skybox/left.png",
-        "assets/textures/skybox/top.png",
-        "assets/textures/skybox/bottom.png",
-        "assets/textures/skybox/front.png",
-        "assets/textures/skybox/back.png"
-    };
-    if (!skybox.load(faces)) {
-        std::cerr << "Failed to load skybox!" << std::endl;
-    }
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    initializeShaders();
-    Shader* terrainShader = ShaderManager::getInstance().getShader("terrain");
-
-    terrainShader->use();
-    terrainShader->setFloat("tilesPerRow", 8.0f);
-    terrainShader->setInt("texture1", 0);
-
-    // TODO: Change where the lightsource is
-    terrainShader->setVec3("lightPos", glm::vec3(0.0f, 50.0f, 0.0f));
-    terrainShader->setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
-
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
-    terrainShader->setMat4("projection", projection);
-
     // Create world and load texture atlas
-    World* world = new World();
+    World* world = new World(&player);
     world->setRenderDistance(renderDistance);
 
     if (!world->loadTextureAtlas("assets/textures/atlas2.png", 8)) {
         std::cerr << "Failed to load texture atlas!" << std::endl;
         return -1;
     }
-
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -134,9 +102,6 @@ int main() {
     ImGui_ImplOpenGL3_Init("#version 460");
     ImGUIManager* imGUIManager = new ImGUIManager(world, &player.getCamera(), &renderDistance, &player);
 
-    Shader* selectionShader = ShaderManager::getInstance().getShader("selection");
-
-    int frameCount = 0;
     HighlightBox highlightBox;
     RaycastResult highlightedBlock;
 
@@ -144,14 +109,8 @@ int main() {
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
-        // frameCount++;
 
         RenderStats::getInstance().resetFrame();
-
-        // if (frameCount % 100 == 0){
-        //     Profiler::getInstance().printStats();
-        //     // world->printDebugInfo();
-        // }
 
         processInput(*window, world);
 
@@ -162,41 +121,15 @@ int main() {
         world->update(player.getPosition());
         soundManager->update();
 
-        terrainShader->use();
-
-        terrainShader->setVec3("viewPos", player.getPosition());
-
         glm::mat4 projection = glm::perspective(glm::radians(player.getCamera().Zoom),
             (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
-        terrainShader->setMat4("projection", projection);
-
         glm::mat4 view = player.getCamera().GetViewMatrix();
-        terrainShader->setMat4("view", view);
 
-        world->render(*terrainShader, &player);
-        world->renderTransparent(*terrainShader, &player);
+        world->renderWorld(projection, view);
 
         highlightedBlock = world->raycastBlock(player.getCamera().Position, player.getFront(), 5.0f);
-
         if (highlightedBlock.hit) {
-            glLineWidth(2.0f);
-            glDisable(GL_DEPTH_TEST);
-
-            selectionShader->use();
-
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, glm::vec3(highlightedBlock.hitPos));
-
-            glm::mat4 viewProj = projection * view;
-
-            selectionShader->setMat4("model", model);
-            selectionShader->setMat4("viewProj", viewProj);
-            selectionShader->setVec3("lineColor", glm::vec3(0.0f, 0.0f, 0.0f));
-
-            highlightBox.draw();
-
-            glEnable(GL_DEPTH_TEST);
-            glLineWidth(1.0f);
+            highlightBox.draw(highlightedBlock, projection, view);
         }
 
         skybox.draw(player.getCamera().GetViewMatrix(), projection);
@@ -325,18 +258,3 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     player.getCamera().ProcessMouseScroll(static_cast<float>(yoffset));
 }
-
-void initializeShaders() {
-    ShaderManager& sm = ShaderManager::getInstance();
-    sm.addShader("skybox", "assets/shader/skybox/skybox.vs.glsl",
-                           "assets/shader/skybox/skybox.fs.glsl");
-    sm.addShader("terrain", "assets/shader/terrain/terrain.vs.glsl",
-                            "assets/shader/terrain/terrain.fs.glsl");
-    sm.addShader("selection", "assets/shader/player/selection_box.vs.glsl",
-                            "assets/shader/player/selection_box.fs.glsl");
-}
-
-void drawHighlightBox() {
-
-}
-

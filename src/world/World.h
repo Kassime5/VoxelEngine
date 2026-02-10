@@ -18,7 +18,13 @@
 #include <condition_variable>
 #include <atomic>
 #include <glm/glm.hpp>
-
+#include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
+#include "src/debug/RenderStats.h"
+#include "src/game/Player.h"
+#include "src/rendering/Camera.h"
+#include "src/rendering/ShaderManager.h"
 #include "WorleyBiome.h"
 #include "PerlinNoise/PerlinNoise.hpp"
 #include "../rendering/Profiler.h"
@@ -53,12 +59,13 @@ struct RaycastResult {
 
 class World {
 public:
-    World();
+    World(Player* _player);
     ~World();
 
     bool loadTextureAtlas(const char* atlasPath, int tilesPerRow = 16);
     void update(const glm::vec3& cameraPosition);
-    void render(Shader& shader, Player* player);
+
+    void renderWorld(glm::mat4 projection, glm::mat4 view);
 
     BlockType getBlock(int worldX, int worldY, int worldZ);
     void setBlock(int worldX, int worldY, int worldZ, BlockType type);
@@ -69,12 +76,16 @@ public:
     void setRenderDistance(int distance) { renderDistance = distance; }
     int getRenderDistance() const { return renderDistance; }
     int getLoadedChunkCount() const { return m_chunks.size(); }
-    void printDebugInfo() const;
     const Biome* getCurrentPlayerBiome(float cameraX, float cameraZ) const;
-    void renderTransparent(Shader& shader, Player* player);
     RaycastResult raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance = 10.0f);
 
 private:
+    Player* player;
+    Shader* terrainShader;
+
+    void render();
+    void renderTransparent();
+
     std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash> m_chunks;
     TextureAtlas textureAtlas;
     int renderDistance;
@@ -115,10 +126,6 @@ private:
     void loadChunksAroundPosition(const glm::ivec3& centerChunkPos);
     void unloadDistantChunks(const glm::ivec3& centerChunkPos);
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
-
-    // Temp for debugging
-    bool stopRenderRefreshCheck = false;
-    std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash> chunksToDraw;
 };
 
 struct Frustum {

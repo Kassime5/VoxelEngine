@@ -53,9 +53,30 @@ static const float skyboxVertices[] = {
      1.0f, -1.0f,  1.0f
 };
 
-const char* Skybox::SHADER_NAME = "skybox";
-
 Skybox::Skybox() : VAO(0), VBO(0), textureID(0) {
+    std::vector<std::string> faces = {
+        "assets/textures/skybox/right.png",
+        "assets/textures/skybox/left.png",
+        "assets/textures/skybox/top.png",
+        "assets/textures/skybox/bottom.png",
+        "assets/textures/skybox/front.png",
+        "assets/textures/skybox/back.png"
+    };
+    if (!load(faces)) {
+        std::cerr << "Failed to load skybox!" << std::endl;
+    }
+
+    ShaderManager& sm = ShaderManager::getInstance();
+    sm.addShader("skybox", "assets/shader/skybox/skybox.vs.glsl",
+                               "assets/shader/skybox/skybox.fs.glsl");
+
+    skyboxShader = sm.getShader("skybox");
+    if (!skyboxShader) {
+        std::cerr << "Failed to get skybox shader!" << std::endl;
+        glDepthFunc(GL_LESS);
+        return;
+    }
+
     setupMesh();
 }
 
@@ -115,14 +136,6 @@ unsigned int Skybox::loadCubemap(const std::vector<std::string>& faces) {
 
 void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
     glDepthFunc(GL_LEQUAL);
-
-    Shader* skyboxShader = ShaderManager::getInstance().getShader(SHADER_NAME);
-
-    if (!skyboxShader) {
-        std::cerr << "Failed to get skybox shader!" << std::endl;
-        glDepthFunc(GL_LESS);
-        return;
-    }
 
     skyboxShader->use();
 

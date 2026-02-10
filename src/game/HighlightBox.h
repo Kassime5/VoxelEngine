@@ -8,9 +8,16 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 
+#include "src/rendering/ShaderManager.h"
+
 class HighlightBox {
 public:
     HighlightBox() {
+        ShaderManager& sm = ShaderManager::getInstance();
+        sm.addShader("highlight", "assets/shader/player/selection_box.vs.glsl",
+                                    "assets/shader/player/selection_box.fs.glsl");
+        highlightBoxShader = sm.getShader("highlight");
+
         setupMesh();
     }
 
@@ -20,10 +27,27 @@ public:
         glDeleteBuffers(1, &EBO);
     }
 
-    void draw() const {
+    void draw(RaycastResult highlightedBlock, glm::mat4 projection, glm::mat4 view) const {
+        glLineWidth(2.0f);
+        glDisable(GL_DEPTH_TEST);
+
+        highlightBoxShader->use();
+
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(highlightedBlock.hitPos));
+
+        glm::mat4 viewProj = projection * view;
+
+        highlightBoxShader->setMat4("model", model);
+        highlightBoxShader->setMat4("viewProj", viewProj);
+        highlightBoxShader->setVec3("lineColor", glm::vec3(0.0f, 0.0f, 0.0f));
+
         glBindVertexArray(VAO);
         glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
+
+        glEnable(GL_DEPTH_TEST);
+        glLineWidth(1.0f);
     }
 
 private:
@@ -64,6 +88,8 @@ private:
 
         glBindVertexArray(0);
     }
+
+    Shader* highlightBoxShader = nullptr;
 };
 
 

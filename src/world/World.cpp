@@ -3,18 +3,19 @@
 //
 
 #include "World.h"
-#include <glm/gtc/matrix_transform.hpp>
-#include <algorithm>
-#include <cmath>
-#include "src/debug/RenderStats.h"
-#include "src/game/Player.h"
-#include "src/rendering/Camera.h"
 
-World::World()
+World::World(Player* _player)
     : renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
       seed(12345), perlinNoise(seed), stopThreads(false) {
+
     worleyBiome = new WorleyBiome(seed, 384);
     initThreadPool(6, 6);
+    player = _player;
+
+    ShaderManager& sm = ShaderManager::getInstance();
+    sm.addShader("terrain", "assets/shader/terrain/terrain.vs.glsl",
+                            "assets/shader/terrain/terrain.fs.glsl");
+    terrainShader = sm.getShader("terrain");
 }
 
 World::~World() {
@@ -174,7 +175,22 @@ void World::update(const glm::vec3& cameraPosition) {
     }
 }
 
-void World::render(Shader& shader, Player* player) {
+void World::renderWorld(glm::mat4 projection, glm::mat4 view) {
+    terrainShader->use();
+    terrainShader->setFloat("tilesPerRow", 8.0f);
+    terrainShader->setInt("texture1", 0);
+
+    // TODO: Change where the lightsource is
+    terrainShader->setVec3("lightPos", glm::vec3(0.0f, 50.0f, 0.0f));
+    terrainShader->setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+    terrainShader->setMat4("projection", projection);
+    terrainShader->setMat4("view", view);
+
+    render();
+    renderTransparent();
+}
+
+void World::render() {
     glm::mat4 viewProj = player->getCamera().GetProjectionMatrix() * player->getCamera().GetViewMatrix();
 
     Frustum frustum;
@@ -194,10 +210,42 @@ void World::render(Shader& shader, Player* player) {
             continue;
         }
 
-        shader.setVec3("chunkOffset", worldPos);
+        terrainShader->setVec3("chunkOffset", worldPos);
         RenderStats::getInstance().addChunkRendered();
         chunk->draw();
     }
+}
+
+void World::renderTransparent() {
+    glm::mat4 viewProj = player->getCamera().GetProjectionMatrix() * player->getCamera().GetViewMatrix();
+    Frustum frustum;
+    frustum.extractFromMatrix(viewProj);
+
+    // textureAtlas.bind(0);
+    constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
+    constexpr float chunkHeight = static_cast<float>(Chunk::HEIGHT);
+
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
+
+    for (const auto& [chunkPos, chunk] : m_chunks) {
+        if (chunk->isTransparentMeshEmpty())
+            continue;
+
+        glm::vec3 worldPos(chunkPos.x * chunkSize, chunkPos.y, chunkPos.z * chunkSize);
+        glm::vec3 chunkMin = worldPos;
+        glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize, chunkHeight, chunkSize);
+
+        if (!frustum.isBoxInFrustum(chunkMin, chunkMax)) {
+            continue;
+        }
+
+        terrainShader->setVec3("chunkOffset", worldPos);
+        chunk->drawTransparent();
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_CULL_FACE);
 }
 
 BlockType World::getBlock(int worldX, int worldY, int worldZ) {
@@ -313,38 +361,6 @@ const Biome* World::getCurrentPlayerBiome(float cameraX, float cameraZ) const {
     return worleyBiome->getBiomeAt(static_cast<int>(cameraX), static_cast<int>(cameraZ));
 }
 
-void World::renderTransparent(Shader& shader, Player* player) {
-    glm::mat4 viewProj = player->getCamera().GetProjectionMatrix() * player->getCamera().GetViewMatrix();
-    Frustum frustum;
-    frustum.extractFromMatrix(viewProj);
-
-    // textureAtlas.bind(0);
-    constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
-    constexpr float chunkHeight = static_cast<float>(Chunk::HEIGHT);
-
-    glDisable(GL_CULL_FACE);
-    glDepthMask(GL_FALSE);
-
-    for (const auto& [chunkPos, chunk] : m_chunks) {
-        if (chunk->isTransparentMeshEmpty())
-            continue;
-
-        glm::vec3 worldPos(chunkPos.x * chunkSize, chunkPos.y, chunkPos.z * chunkSize);
-        glm::vec3 chunkMin = worldPos;
-        glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize, chunkHeight, chunkSize);
-
-        if (!frustum.isBoxInFrustum(chunkMin, chunkMax)) {
-            continue;
-        }
-
-        shader.setVec3("chunkOffset", worldPos);
-        chunk->drawTransparent();
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_CULL_FACE);
-}
-
 RaycastResult World::raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance) {
     RaycastResult result{false, glm::ivec3(0), glm::ivec3(0)};
 
@@ -375,24 +391,4 @@ RaycastResult World::raycastBlock(const glm::vec3& origin, const glm::vec3& dire
     }
 
     return result;
-}
-
-void World::printDebugInfo() const {
-    int empty = 0, generating = 0, generated = 0, buildingMesh = 0, meshBuilt = 0, ready = 0;
-    for (const auto& pair : m_chunks) {
-        switch (pair.second->getState()) {
-            case ChunkState::Empty: empty++; break;
-            case ChunkState::Generating: generating++; break;
-            case ChunkState::Generated: generated++; break;
-            case ChunkState::BuildingMesh: buildingMesh++; break;
-            case ChunkState::MeshBuilt: meshBuilt++; break;
-            case ChunkState::Ready: ready++; break;
-        }
-    }
-    std::cout << "\n=== Chunk Status ===\n";
-    std::cout << "Total: " << m_chunks.size() << "\n";
-    std::cout << "Empty: " << empty << " | Generating: " << generating << "\n";
-    std::cout << "Generated: " << generated << " | BuildingMesh: " << buildingMesh << "\n";
-    std::cout << "MeshBuilt: " << meshBuilt << " | Ready: " << ready << "\n";
-    std::cout << "===================\n";
 }
