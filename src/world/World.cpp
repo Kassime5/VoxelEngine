@@ -16,6 +16,10 @@ World::World(Player* _player)
     sm.addShader("terrain", "assets/shader/terrain/terrain.vs.glsl",
                             "assets/shader/terrain/terrain.fs.glsl");
     terrainShader = sm.getShader("terrain");
+
+    if (!loadTextureAtlas("assets/textures/atlas2.png", 8)) {
+        std::cerr << "Failed to load texture atlas!" << std::endl;
+    }
 }
 
 World::~World() {

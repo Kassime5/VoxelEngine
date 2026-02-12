@@ -16,16 +16,13 @@
 #include "src/game/Player.h"
 #include "src/game/HighlightBox.h"
 #include "src/game/SoundManager.h"
+#include "src/input/PlayerController.h"
 #include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
 #include "thirdparty/AL/al.h"
 #include "thirdparty/AL/alc.h"
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
-void processInput(GLFWwindow *window, World *world);
-void mouse_callback(GLFWwindow *window, double xposIn, double yposIn);
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-std::string formatNumber(int number);
 
 // Window Settings
 const unsigned int SCR_WIDTH = 1920;
@@ -67,11 +64,9 @@ int main() {
 
     glfwMakeContextCurrent(*window);
     window->setSwapInterval(vsync ? 1 : 0);
-    window->setInputMode(GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+    InputManager::getInstance().initialize(*window);
     glfwSetFramebufferSizeCallback(*window, framebuffer_size_callback);
-    glfwSetCursorPosCallback(*window, mouse_callback);
-    glfwSetScrollCallback(*window, scroll_callback);
 
     // glad: load all OpenGL function pointers
     if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
@@ -89,10 +84,7 @@ int main() {
     World* world = new World(&player);
     world->setRenderDistance(renderDistance);
 
-    if (!world->loadTextureAtlas("assets/textures/atlas2.png", 8)) {
-        std::cerr << "Failed to load texture atlas!" << std::endl;
-        return -1;
-    }
+    PlayerController playerController(&player, world);
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -106,18 +98,20 @@ int main() {
     RaycastResult highlightedBlock;
 
     while (!glfwWindowShouldClose(*window)) {
+        glfwPollEvents();
+
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
         RenderStats::getInstance().resetFrame();
 
-        processInput(*window, world);
-
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        InputManager::getInstance().update();
         player.update(deltaTime, world);
+        playerController.processInput(deltaTime);
         world->update(player.getPosition());
         soundManager->update();
 
@@ -135,19 +129,14 @@ int main() {
         skybox.draw(player.getCamera().GetViewMatrix(), projection);
 
         imGUIManager->drawImGUIElements(deltaTime);
-
-        // TODO: Change this part
-        world->setRenderDistance(renderDistance);
-
         glfwSwapBuffers(*window);
-        glfwPollEvents();
+        InputManager::getInstance().endFrame();
     }
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
-    // glfw: terminate, clearing all previously allocated GLFW resources.
     glfwTerminate();
 
     soundManager->shutdown();
@@ -158,103 +147,6 @@ int main() {
     return 0;
 }
 
-bool keyC = false;
-bool keyEsc = false;
-
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
-}
-
-void processInput(GLFWwindow *window, World *world) {
-
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS && !keyEsc) {
-        keyEsc = true;
-        isCursorVisible = !isCursorVisible;
-        if (!isCursorVisible) {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        } else {
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        }
-    } else if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_RELEASE) {
-        keyEsc = false;
-    }
-
-    static bool keyF = false;
-    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS && !keyF) {
-        keyF = true;
-        if (player.isFlying()) {
-            player.deactivateFlying();
-        } else {
-            player.activateFlying();
-        }
-    } else if (glfwGetKey(window, GLFW_KEY_F) == GLFW_RELEASE) {
-        keyF = false;
-    }
-
-    bool sprinting = false;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-        sprinting = true;
-
-    bool forward = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
-    bool backward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
-    bool left = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
-    bool right = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
-
-    player.processMovement(forward, backward, left, right, sprinting, deltaTime);
-
-    if (player.isFlying()) {
-        bool ascending = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
-        bool descending = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
-        player.processVerticalInput(ascending, descending, deltaTime);
-    } else {
-        // Jump when not flying
-        static bool keySpace = false;
-        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !keySpace) {
-            keySpace = true;
-            player.jump();
-        } else if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE) {
-            keySpace = false;
-        }
-    }
-
-    if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
-        std::cout << player.getPosition().x << "-" << player.getPosition().y << "-" << player.getPosition().z << std::endl;
-        BlockType type = world->getBlock(player.getPosition().x, player.getPosition().y, player.getPosition().z);
-        std::cout << printBlockType(type) << std::endl;
-    }
-
-    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !keyC) {
-        keyC = true;
-        world->setBlock(player.getPosition().x, player.getPosition().y, player.getPosition().z, BlockType::Grass);
-    } else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
-        keyC = false;
-    }
-}
-
-void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
-{
-    if (isCursorVisible == true) return;
-
-    float xpos = static_cast<float>(xposIn);
-    float ypos = static_cast<float>(yposIn);
-
-    if (firstMouse)
-    {
-        lastX = xpos;
-        lastY = ypos;
-        firstMouse = false;
-    }
-
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
-
-    lastX = xpos;
-    lastY = ypos;
-
-    player.getCamera().ProcessMouseMovement(xoffset, yoffset);
-}
-
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-{
-    player.getCamera().ProcessMouseScroll(static_cast<float>(yoffset));
 }

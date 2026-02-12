@@ -73,7 +73,11 @@ add_executable(GLFWVoxel main.cpp
         src/game/Player.h
         src/game/SoundManager.cpp
         src/game/SoundManager.h
-        src/game/HighlightBox.h)
+        src/game/HighlightBox.h
+        src/input/InputManager.cpp
+        src/input/InputManager.h
+        src/input/PlayerController.cpp
+        src/input/PlayerController.h)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
