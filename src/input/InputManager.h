@@ -57,6 +57,7 @@ enum class GameAction {
     TertiaryAction,
 
     // UI
+    ToggleHitBox,
     TogglePause,
     ToggleInventory,
     ToggleDebug,

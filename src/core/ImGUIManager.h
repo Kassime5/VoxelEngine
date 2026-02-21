@@ -24,6 +24,7 @@ private:
     World* world;
     Camera* camera;
     Player* player;
+    EntityManager* entityManager;
 
     bool wireframe = false;
     int* renderDistance;

@@ -3,21 +3,21 @@
 //
 
 
-#include "Mesh.h"
+#include "ChunkMesh.h"
 #include "src/debug/RenderStats.h"
 
-Mesh::Mesh() : VAO(0), VBO(0), EBO(0), initialized(false) {}
+ChunkMesh::ChunkMesh() : VAO(0), VBO(0), EBO(0), initialized(false) {}
 
-Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices)
+ChunkMesh::ChunkMesh(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices)
     : vertices(vertices), indices(indices), VAO(0), VBO(0), EBO(0), initialized(false) {
     setupMesh();
 }
 
-Mesh::~Mesh() {
+ChunkMesh::~ChunkMesh() {
     cleanup();
 }
 
-Mesh::Mesh(Mesh&& other) noexcept
+ChunkMesh::ChunkMesh(ChunkMesh&& other) noexcept
     : vertices(std::move(other.vertices)),
       indices(std::move(other.indices)),
       VAO(other.VAO),
@@ -30,7 +30,7 @@ Mesh::Mesh(Mesh&& other) noexcept
     other.initialized = false;
 }
 
-Mesh& Mesh::operator=(Mesh&& other) noexcept {
+ChunkMesh& ChunkMesh::operator=(ChunkMesh&& other) noexcept {
     if (this != &other) {
         cleanup();
 
@@ -49,19 +49,19 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept {
     return *this;
 }
 
-void Mesh::setData(const std::vector<Vertex>& newVertices, const std::vector<unsigned int>& newIndices) {
+void ChunkMesh::setData(const std::vector<Vertex>& newVertices, const std::vector<unsigned int>& newIndices) {
     vertices = newVertices;
     indices = newIndices;
     setupMesh();
 }
 
-void Mesh::clear() {
+void ChunkMesh::clear() {
     cleanup();
     vertices.clear();
     indices.clear();
 }
 
-void Mesh::setupMesh() {
+void ChunkMesh::setupMesh() {
     if (vertices.empty()) return;
 
     // Clean up old buffers if they exist
@@ -111,7 +111,7 @@ void Mesh::setupMesh() {
     initialized = true;
 }
 
-void Mesh::draw() const {
+void ChunkMesh::draw() const {
     if (!initialized || vertices.empty()) return;
 
     glBindVertexArray(VAO);
@@ -123,7 +123,7 @@ void Mesh::draw() const {
     RenderStats::getInstance().addVertices(vertices.size());
 }
 
-void Mesh::cleanup() {
+void ChunkMesh::cleanup() {
     if (initialized) {
         glDeleteVertexArrays(1, &VAO);
         glDeleteBuffers(1, &VBO);

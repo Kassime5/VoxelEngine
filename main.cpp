@@ -19,6 +19,7 @@
 #include "src/input/PlayerController.h"
 #include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
+#include "src/rendering/Meshes/Model.h"
 #include "thirdparty/AL/al.h"
 #include "thirdparty/AL/alc.h"
 
@@ -97,6 +98,8 @@ int main() {
     HighlightBox highlightBox;
     RaycastResult highlightedBlock;
 
+    EntityManager* entityManager = world->getEntityManager();
+
     while (!glfwWindowShouldClose(*window)) {
         glfwPollEvents();
 
@@ -113,6 +116,7 @@ int main() {
         player.update(deltaTime, world);
         playerController.processInput(deltaTime);
         world->update(player.getPosition());
+        entityManager->update(deltaTime, world);
         soundManager->update();
 
         glm::mat4 projection = glm::perspective(glm::radians(player.getCamera().Zoom),

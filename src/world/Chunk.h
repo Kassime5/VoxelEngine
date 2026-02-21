@@ -9,7 +9,7 @@
 #include <atomic>
 #include <mutex>
 #include <optional>
-#include "../rendering/Mesh.h"
+#include "../rendering/Meshes/ChunkMesh.h"
 #include "../rendering/TextureAltas.h"
 #include "Block.h"
 #include "Biome.h"
@@ -80,8 +80,8 @@ private:
     glm::ivec3 chunkPosition;
     BlockType chunkBlocks[SIZE][HEIGHT][SIZE];
 
-    Mesh chunkMesh;
-    Mesh chunkTransparentMesh;
+    ChunkMesh chunkMesh;
+    ChunkMesh chunkTransparentMesh;
 
     bool chunkDirty;
     std::atomic<ChunkState> chunkState;

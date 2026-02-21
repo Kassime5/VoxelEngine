@@ -36,17 +36,12 @@ void Player::update(float deltaTime, World* world) {
 void Player::processMovement(bool forward, bool backward, bool left, bool right, bool sprinting, float deltaTime) {
     glm::vec3 front, rightVec;
 
-    if (flying) {
-        front = camera.Front;
-        rightVec = camera.Right;
-    } else {
-        front = glm::normalize(glm::vec3(camera.Front.x, 0.0f, camera.Front.z));
-        rightVec = camera.Right;
-    }
+    front = glm::normalize(glm::vec3(camera.Front.x, 0.0f, camera.Front.z));
+    rightVec = camera.Right;
 
     float speed = MOVE_SPEED * (sprinting ? SPRINT_MULTIPLIER : 1.0f);
     if (flying) {
-        speed *= 2.0f;
+        speed *= 5.0f;
     }
 
     glm::vec3 moveDir(0.0f);
@@ -98,11 +93,10 @@ void Player::processVerticalInput(bool ascending, bool descending, float deltaTi
     float verticalSpeed = MOVE_SPEED * 2.0f;
 
     if (ascending) {
-        velocity.y = verticalSpeed;
+        velocity.y = verticalSpeed * 2.0f;
     } else if (descending) {
-        velocity.y = -verticalSpeed;
+        velocity.y = -verticalSpeed * 2.0f;
     } else if (!ascending && !descending) {
-        // If no vertical input, stop vertical movement
         velocity.y = 0.0f;
     }
 }

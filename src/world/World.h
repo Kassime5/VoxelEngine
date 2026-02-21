@@ -28,17 +28,10 @@
 #include "WorleyBiome.h"
 #include "PerlinNoise/PerlinNoise.hpp"
 #include "../rendering/Profiler.h"
+#include "src/game/entities/EntityManager.h"
+#include "src/utils/VectorHash.h"
 
 class Player;
-
-struct IVec3Hash {
-    std::size_t operator()(const glm::ivec3& v) const {
-        std::size_t h1 = std::hash<int>()(v.x);
-        std::size_t h2 = std::hash<int>()(v.y);
-        std::size_t h3 = std::hash<int>()(v.z);
-        return h1 ^ (h2 << 1) ^ (h3 << 2);
-    }
-};
 
 struct ChunkGenerationTask {
     glm::ivec3 chunkPos;
@@ -79,6 +72,8 @@ public:
     const Biome* getCurrentPlayerBiome(float cameraX, float cameraZ) const;
     RaycastResult raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance = 10.0f);
 
+    EntityManager* getEntityManager() { return &entityManager; }
+
 private:
     Player* player;
     Shader* terrainShader;
@@ -107,6 +102,11 @@ private:
     std::queue<ChunkMeshTask> gpuUploadQueue;
     std::mutex gpuUploadQueueMutex;
 
+    std::queue<glm::ivec3> pendingEntitySpawns;
+    std::mutex pendingEntitySpawnsMutex;
+    void processPendingEntitySpawns(int maxPerFrame);
+
+
     std::atomic<bool> stopThreads;
 
     void initThreadPool(int _generationThreads, int _meshThreads);
@@ -126,6 +126,8 @@ private:
     void loadChunksAroundPosition(const glm::ivec3& centerChunkPos);
     void unloadDistantChunks(const glm::ivec3& centerChunkPos);
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
+
+    EntityManager entityManager;
 };
 
 struct Frustum {

@@ -34,8 +34,25 @@ add_library(imgui
 set(OPENAL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/thirdparty/AL")
 set(OPENAL_LIBRARY "${CMAKE_SOURCE_DIR}/thirdparty/AL/OpenAL32.lib")
 set(OPENAL_DLL "${CMAKE_SOURCE_DIR}/thirdparty/AL/OpenAL32.dll")
-
 include_directories(${OPENAL_INCLUDE_DIR})
+
+# Assimp
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+
+# Disable all importers/exporters first
+set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+
+# Enable only OBJ (since you're using .obj files)
+set(ASSIMP_BUILD_OBJ_IMPORTER ON CACHE BOOL "" FORCE)
+
+# If you need other formats later, enable them individually:
+# set(ASSIMP_BUILD_FBX_IMPORTER ON CACHE BOOL "" FORCE)
+# set(ASSIMP_BUILD_GLTF_IMPORTER ON CACHE BOOL "" FORCE)
+
+add_subdirectory(thirdparty/assimp)
 
 add_executable(GLFWVoxel main.cpp
         src/rendering/Shader.cpp
@@ -46,8 +63,8 @@ add_executable(GLFWVoxel main.cpp
         src/world/block.h
         src/rendering/Texture.cpp
         src/rendering/Texture.h
-        src/rendering/Mesh.cpp
-        src/rendering/Mesh.h
+        src/rendering/Meshes/ChunkMesh.cpp
+        src/rendering/Meshes/ChunkMesh.h
         src/world/Chunk.cpp
         src/world/Chunk.h
         src/world/World.cpp
@@ -77,7 +94,26 @@ add_executable(GLFWVoxel main.cpp
         src/input/InputManager.cpp
         src/input/InputManager.h
         src/input/PlayerController.cpp
-        src/input/PlayerController.h)
+        src/input/PlayerController.h
+        src/game/entities/Entity.cpp
+        src/game/entities/Entity.h
+        src/game/ai/EntityAI.cpp
+        src/game/ai/EntityAI.h
+        src/game/entities/Animal.cpp
+        src/game/entities/Animal.h
+        src/game/entities/EntityManager.cpp
+        src/game/entities/EntityManager.h
+        src/utils/VectorHash.h
+        src/rendering/Meshes/EntityMesh.cpp
+        src/rendering/Meshes/EntityMesh.h
+        src/utils/AABB.h
+        src/rendering/Meshes/ModelMesh.cpp
+        src/rendering/Meshes/ModelMesh.h
+        src/rendering/Meshes/Model.cpp
+        src/rendering/Meshes/Model.h
+        src/rendering/Meshes/ModelManager.cpp
+        src/rendering/Meshes/ModelManager.h
+        src/game/DebugHitBox.h)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
@@ -101,6 +137,7 @@ target_link_libraries(GLFWVoxel PRIVATE
         glm::glm
         imgui
         ${OPENAL_LIBRARY}
+        assimp
 )
 
 target_link_libraries(imgui PUBLIC glfw glad)

@@ -77,12 +77,36 @@ void World::generationWorkerThread() {
             task.chunk->setState(ChunkState::Generating);
             task.chunk->generate(&perlinNoise, worleyBiome);
 
-            if (isChunkLoaded(task.chunkPos)) {
+            {
+                std::lock_guard<std::mutex> lock(pendingEntitySpawnsMutex);
+                pendingEntitySpawns.push(task.chunkPos);
+            }
+
+            {
                 std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
                 meshBuildQueue.push({task.chunk, MeshData(), MeshData()});
-                meshBuildQueueCV.notify_one();
             }
+            meshBuildQueueCV.notify_one();
         }
+    }
+}
+
+void World::processPendingEntitySpawns(int maxPerFrame) {
+    int processed = 0;
+
+    // TODO: Maybe make entities spawn in group (e.g. family of cows)
+    while (processed < maxPerFrame) {
+        glm::ivec3 pos;
+
+        {
+            std::lock_guard<std::mutex> lock(pendingEntitySpawnsMutex);
+            if (pendingEntitySpawns.empty()) break;
+            pos = pendingEntitySpawns.front();
+            pendingEntitySpawns.pop();
+        }
+
+        entityManager.spawnAnimalsInChunk(pos, this);
+        processed++;
     }
 }
 
@@ -177,6 +201,11 @@ void World::update(const glm::vec3& cameraPosition) {
         PROFILE_SCOPE("World::update - GPU uploads");
         processGPUUploadQueue(2);
     }
+
+    {
+        PROFILE_SCOPE("World::update - entity spawns");
+        processPendingEntitySpawns(4);
+    }
 }
 
 void World::renderWorld(glm::mat4 projection, glm::mat4 view) {
@@ -192,6 +221,9 @@ void World::renderWorld(glm::mat4 projection, glm::mat4 view) {
 
     render();
     renderTransparent();
+
+    entityManager.render(projection, view);
+    entityManager.renderDebug(projection, view);
 }
 
 void World::render() {
@@ -309,10 +341,11 @@ glm::ivec3 World::worldToLocalPos(int worldX, int worldY, int worldZ) const {
 }
 
 void World::loadChunksAroundPosition(const glm::ivec3& centerChunkPos) {
+    std::vector<ChunkGenerationTask> toLoad;
+
     for (int x = -renderDistance; x <= renderDistance; x++) {
         for (int z = -renderDistance; z <= renderDistance; z++) {
-            float distance = std::sqrt(x * x + z * z);
-            if (distance > renderDistance) continue;
+            if (std::sqrt(x * x + z * z) > renderDistance) continue;
 
             glm::ivec3 chunkPos = centerChunkPos + glm::ivec3(x, 0, z);
 
@@ -320,15 +353,27 @@ void World::loadChunksAroundPosition(const glm::ivec3& centerChunkPos) {
                 auto chunk = std::make_unique<Chunk>(chunkPos);
                 Chunk* chunkPtr = chunk.get();
                 m_chunks[chunkPos] = std::move(chunk);
-
-                {
-                    std::lock_guard<std::mutex> lock(generationQueueMutex);
-                    generationQueue.push({chunkPos, chunkPtr});
-                }
-                generationQueueCV.notify_one();
+                toLoad.push_back({chunkPos, chunkPtr});
             }
         }
     }
+
+    // Sort closest to player first
+    std::sort(toLoad.begin(), toLoad.end(), [&](const ChunkGenerationTask& a, const ChunkGenerationTask& b) {
+        auto distSq = [&](const glm::ivec3& pos) {
+            glm::ivec3 d = pos - centerChunkPos;
+            return d.x * d.x + d.z * d.z;
+        };
+        return distSq(a.chunkPos) < distSq(b.chunkPos);
+    });
+
+    {
+        std::lock_guard<std::mutex> lock(generationQueueMutex);
+        for (auto& task : toLoad) {
+            generationQueue.push(task);
+        }
+    }
+    generationQueueCV.notify_all();
 }
 
 void World::unloadDistantChunks(const glm::ivec3& centerChunkPos) {

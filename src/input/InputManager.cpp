@@ -281,9 +281,10 @@ void InputManager::setupDefaultBindings() {
     bindAction(GameAction::TertiaryAction, InputBinding(GLFW_MOUSE_BUTTON_MIDDLE));
 
     // UI
+    bindAction(GameAction::ToggleHitBox, InputBinding(GLFW_KEY_F3));
     bindAction(GameAction::TogglePause, InputBinding(GLFW_KEY_ESCAPE), InputContext::Any);
     bindAction(GameAction::ToggleInventory, InputBinding(GLFW_KEY_E));
-    bindAction(GameAction::ToggleDebug, InputBinding(GLFW_KEY_F3));
+    // bindAction(GameAction::ToggleDebug, InputBinding(GLFW_KEY_F3));
 
     // Misc
     bindAction(GameAction::Screenshot, InputBinding(GLFW_KEY_F2));

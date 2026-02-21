@@ -10,17 +10,7 @@
 #include "src/rendering/Camera.h"
 #include "src/world/World.h"
 #include "src/world/Block.h"
-
-struct AABB {
-    glm::vec3 min;
-    glm::vec3 max;
-
-    bool intersects(const AABB& other) const {
-        return (min.x <= other.max.x && max.x >= other.min.x) &&
-               (min.y <= other.max.y && max.y >= other.min.y) &&
-               (min.z <= other.max.z && max.z >= other.min.z);
-    }
-};
+#include "src/utils/AABB.h"
 
 class Player {
 public:

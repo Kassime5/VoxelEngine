@@ -2,8 +2,8 @@
 // Created by maxim on 03/01/2026.
 //
 
-#ifndef GLFWVOXEL_MESH_H
-#define GLFWVOXEL_MESH_H
+#ifndef GLFWVOXEL_CHUNKMESH_H
+#define GLFWVOXEL_CHUNKMESH_H
 #include <glad/glad.h>
 #include <vector>
 #include <glm/glm.hpp>
@@ -17,22 +17,22 @@ struct Vertex {
     uint8_t quadHeight;
 };
 
-class Mesh {
+class ChunkMesh {
 public:
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
 
-    Mesh();
-    Mesh(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices);
-    ~Mesh();
+    ChunkMesh();
+    ChunkMesh(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices);
+    ~ChunkMesh();
 
     // Delete copy constructor/assignment to avoid double-free of OpenGL resources
-    Mesh(const Mesh&) = delete;
-    Mesh& operator=(const Mesh&) = delete;
+    ChunkMesh(const ChunkMesh&) = delete;
+    ChunkMesh& operator=(const ChunkMesh&) = delete;
 
     // Move semantics for efficient transfers
-    Mesh(Mesh&& other) noexcept;
-    Mesh& operator=(Mesh&& other) noexcept;
+    ChunkMesh(ChunkMesh&& other) noexcept;
+    ChunkMesh& operator=(ChunkMesh&& other) noexcept;
 
     void setData(const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices);
     void clear();
@@ -49,4 +49,4 @@ private:
 };
 
 
-#endif //GLFWVOXEL_MESH_H
+#endif //GLFWVOXEL_CHUNKMESH_H

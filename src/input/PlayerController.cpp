@@ -86,20 +86,16 @@ void PlayerController::processInteractionInput() {
 
     RaycastResult target = getTargetedBlock();
 
-    if (input.isActionPressed(GameAction::PrimaryAction)) {
+    if (input.isActionPressed(GameAction::SecondaryAction)) {
         if (target.hit) {
-            // Place block adjacent to hit surface
             glm::ivec3 placePos = target.hitPos - target.hitNormal;
             world->setBlock(placePos.x, placePos.y, placePos.z, BlockType::Grass);
-            std::cout << "Placed block at: " << placePos.x << ", " << placePos.y << ", " << placePos.z << std::endl;
         }
     }
 
-    if (input.isActionPressed(GameAction::SecondaryAction)) {
+    if (input.isActionPressed(GameAction::PrimaryAction)) {
         if (target.hit) {
-            // Break the targeted block
             world->setBlock(target.hitPos.x, target.hitPos.y, target.hitPos.z, BlockType::Air);
-            std::cout << "Broke block at: " << target.hitPos.x << ", " << target.hitPos.y << ", " << target.hitPos.z << std::endl;
         }
     }
 
@@ -119,10 +115,8 @@ void PlayerController::processUIInput() {
     if (input.isActionPressed(GameAction::TogglePause)) {
         if (input.getCurrentContext() == InputContext::Gameplay) {
             input.pushContext(InputContext::UI);
-            std::cout << "Paused - cursor visible" << std::endl;
         } else if (input.getCurrentContext() == InputContext::UI) {
             input.popContext();
-            std::cout << "Unpaused - cursor hidden" << std::endl;
         }
     }
 
@@ -140,6 +134,10 @@ void PlayerController::processDebugInput() {
     InputManager& input = InputManager::getInstance();
 
     // Toggle debug overlay
+    if (input.isActionPressed(GameAction::ToggleHitBox)) {
+        world->getEntityManager()->toggleHitboxes();
+    }
+
     if (input.isActionPressed(GameAction::ToggleDebug)) {
         // TODO: Toggle debug HUD
         std::cout << "Toggled debug overlay" << std::endl;

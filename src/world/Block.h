@@ -36,6 +36,10 @@ inline BlockRenderType getBlockRenderType(BlockType type) {
     }
 }
 
+inline bool canGoThrough(BlockType type) {
+    return type == BlockType::Air || type == BlockType::TallGrass;
+}
+
 inline bool isBlockOpaque(BlockType type) {
     return type != BlockType::Air;
 }
