@@ -3,32 +3,31 @@
 //
 
 #include "World.h"
+#include "src/game/Player.h"
 
-World::World(Player* _player)
-    : renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
-      seed(12345), perlinNoise(seed), stopThreads(false) {
-
-    worleyBiome = new WorleyBiome(seed, 384);
+World::World(Player& _player)
+    : player(_player), renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
+      seed(12345), perlinNoise(seed)
+{
+    worleyBiome = std::make_unique<WorleyBiome>(seed, 384);
     initThreadPool(6, 6);
-    player = _player;
 
     ShaderManager& sm = ShaderManager::getInstance();
     sm.addShader("terrain", "assets/shader/terrain/terrain.vs.glsl",
-                            "assets/shader/terrain/terrain.fs.glsl");
+                 "assets/shader/terrain/terrain.fs.glsl");
     terrainShader = sm.getShader("terrain");
 
-    if (!loadTextureAtlas("assets/textures/atlas2.png", 8)) {
+    if (!loadTextureAtlas("assets/textures/atlas2.png", 8))
+    {
         std::cerr << "Failed to load texture atlas!" << std::endl;
     }
 }
 
 World::~World() {
     shutdownThreadPool();
-    delete worleyBiome;
 }
 
 void World::initThreadPool(int _generationThreads, int _meshThreads) {
-    stopThreads = false;
     for (int i = 0; i < _generationThreads; i++) {
         generationThreads.emplace_back(&World::generationWorkerThread, this);
     }
@@ -38,32 +37,41 @@ void World::initThreadPool(int _generationThreads, int _meshThreads) {
 }
 
 void World::shutdownThreadPool() {
-    stopThreads = true;
+    for (auto& thread : generationThreads) thread.request_stop();
+    for (auto& thread : meshBuildThreads) thread.request_stop();
+
+    // Wake up any waiting threads so they can see the stop request
     generationQueueCV.notify_all();
     meshBuildQueueCV.notify_all();
 
-    for (auto& thread : generationThreads) {
-        if (thread.joinable()) thread.join();
-    }
-    for (auto& thread : meshBuildThreads) {
-        if (thread.joinable()) thread.join();
-    }
-
     generationThreads.clear();
     meshBuildThreads.clear();
+
+    // Clear queues to avoid dangling Chunk* pointers
+    {
+        std::lock_guard lock(generationQueueMutex);
+        generationQueue = {};
+    }
+    {
+        std::lock_guard lock(meshBuildQueueMutex);
+        meshBuildQueue = {};
+    }
+    {
+        std::lock_guard lock(gpuUploadQueueMutex);
+        gpuUploadQueue = {};
+    }
 }
 
-void World::generationWorkerThread() {
-    while (!stopThreads) {
+void World::generationWorkerThread(std::stop_token stopToken) {
+    while (!stopToken.stop_requested()) {
         ChunkGenerationTask task;
-
         {
             std::unique_lock<std::mutex> lock(generationQueueMutex);
-            generationQueueCV.wait(lock, [this] {
-                return stopThreads || !generationQueue.empty();
+            generationQueueCV.wait(lock, stopToken, [this] {
+                return !generationQueue.empty();
             });
 
-            if (stopThreads && generationQueue.empty()) return;
+            if (stopToken.stop_requested() && generationQueue.empty()) return;
 
             if (!generationQueue.empty()) {
                 task = generationQueue.front();
@@ -75,7 +83,7 @@ void World::generationWorkerThread() {
 
         if (isChunkLoaded(task.chunkPos)) {
             task.chunk->setState(ChunkState::Generating);
-            task.chunk->generate(&perlinNoise, worleyBiome);
+            task.chunk->generate(&perlinNoise, worleyBiome.get());
 
             {
                 std::lock_guard<std::mutex> lock(pendingEntitySpawnsMutex);
@@ -110,17 +118,17 @@ void World::processPendingEntitySpawns(int maxPerFrame) {
     }
 }
 
-void World::meshBuildWorkerThread() {
-    while (!stopThreads) {
+void World::meshBuildWorkerThread(std::stop_token stopToken) {
+    while (!stopToken.stop_requested()) {
         ChunkMeshTask task;
 
         {
             std::unique_lock<std::mutex> lock(meshBuildQueueMutex);
-            meshBuildQueueCV.wait(lock, [this] {
-                return stopThreads || !meshBuildQueue.empty();
+            meshBuildQueueCV.wait(lock, stopToken, [this] {
+                return !meshBuildQueue.empty();
             });
 
-            if (stopThreads && meshBuildQueue.empty()) return;
+            if (stopToken.stop_requested() && meshBuildQueue.empty()) return;
 
             if (!meshBuildQueue.empty()) {
                 task = meshBuildQueue.front();
@@ -227,7 +235,7 @@ void World::renderWorld(glm::mat4 projection, glm::mat4 view) {
 }
 
 void World::render() {
-    glm::mat4 viewProj = player->getCamera().GetProjectionMatrix() * player->getCamera().GetViewMatrix();
+    glm::mat4 viewProj = player.getCamera().GetProjectionMatrix() * player.getCamera().GetViewMatrix();
 
     Frustum frustum;
     frustum.extractFromMatrix(viewProj);
@@ -253,7 +261,7 @@ void World::render() {
 }
 
 void World::renderTransparent() {
-    glm::mat4 viewProj = player->getCamera().GetProjectionMatrix() * player->getCamera().GetViewMatrix();
+    glm::mat4 viewProj = player.getCamera().GetProjectionMatrix() * player.getCamera().GetViewMatrix();
     Frustum frustum;
     frustum.extractFromMatrix(viewProj);
 

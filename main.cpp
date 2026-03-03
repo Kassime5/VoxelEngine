@@ -19,31 +19,19 @@
 #include "src/input/PlayerController.h"
 #include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
-#include "src/rendering/Meshes/Model.h"
 #include "thirdparty/AL/al.h"
-#include "thirdparty/AL/alc.h"
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 
 // Window Settings
-const unsigned int SCR_WIDTH = 1920;
-const unsigned int SCR_HEIGHT = 1080;
+constexpr unsigned int SCR_WIDTH = 1920;
+constexpr unsigned int SCR_HEIGHT = 1080;
 bool vsync = false;
 
 // Engine variables
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 int renderDistance = 8;
-SoundManager* soundManager;
-
-// Camera variables
-Player player(glm::vec3(0, 300, 0));
-float lastX = SCR_WIDTH / 2.0f;
-float lastY = SCR_HEIGHT / 2.0f;
-bool firstMouse = true;
-
-bool isCursorVisible = false;
-ALCdevice *device;
 
 int main() {
     // glfw: initialize and configure
@@ -52,9 +40,11 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    Window *window = new Window(SCR_WIDTH, SCR_HEIGHT, "OpenGL");
+    // Creation of all the stuff, prob need to move to an actual game manager or smth
+    Player player(glm::vec3(0, 300, 0));
+    auto window = std::make_unique<Window>(SCR_WIDTH, SCR_HEIGHT, "OpenGL");
 
-    soundManager = new SoundManager(&player);
+    auto soundManager = std::make_unique<SoundManager>(player);
     if (!soundManager->initialize()) {
         std::cerr << "Failed to initialize sound system!" << std::endl;
     }
@@ -82,10 +72,10 @@ int main() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Create world and load texture atlas
-    World* world = new World(&player);
+    auto world = std::make_unique<World>(player);
     world->setRenderDistance(renderDistance);
 
-    PlayerController playerController(&player, world);
+    PlayerController playerController(&player, (world.get()));
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -93,7 +83,8 @@ int main() {
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(*window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
-    ImGUIManager* imGUIManager = new ImGUIManager(world, &player.getCamera(), &renderDistance, &player);
+
+    auto imGUIManager = std::make_unique<ImGUIManager>(*world, player.getCamera(), renderDistance, player);
 
     HighlightBox highlightBox;
     RaycastResult highlightedBlock;
@@ -113,10 +104,10 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         InputManager::getInstance().update();
-        player.update(deltaTime, world);
+        player.update(deltaTime, *world);
         playerController.processInput(deltaTime);
         world->update(player.getPosition());
-        entityManager->update(deltaTime, world);
+        entityManager->update(deltaTime, world.get());
         soundManager->update();
 
         glm::mat4 projection = glm::perspective(glm::radians(player.getCamera().Zoom),
@@ -142,11 +133,6 @@ int main() {
     ImGui::DestroyContext();
 
     glfwTerminate();
-
-    soundManager->shutdown();
-    delete soundManager;
-    delete window;
-    delete world;
 
     return 0;
 }

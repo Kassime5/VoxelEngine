@@ -27,10 +27,9 @@ struct WAVHeader {
     int32_t dataSize;
 };
 
-SoundManager::SoundManager(Player* _player)
-    : device(nullptr), context(nullptr) {
-    player = _player;
-}
+SoundManager::SoundManager(Player& _player)
+    : device(nullptr), context(nullptr), player(_player)
+{}
 
 SoundManager::~SoundManager() {
     shutdown();
@@ -271,10 +270,10 @@ bool SoundManager::isPlaying(ALuint source) {
 }
 
 void SoundManager::update() {
-    glm::vec3 pos = player->getPosition();
-    glm::vec3 vel = player->getVelocity();
-    glm::vec3 front = player->getFront();
-    glm::vec3 up = player->getUp();
+    glm::vec3 pos = player.getPosition();
+    glm::vec3 vel = player.getVelocity();
+    glm::vec3 front = player.getFront();
+    glm::vec3 up = player.getUp();
 
     this->setListenerPosition(pos.x, pos.y, pos.z);
     // Effect is kinda horrible TODO: remove or change? Maybe divide the velocity?

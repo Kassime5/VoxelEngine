@@ -17,17 +17,17 @@
 class ImGUIManager
 {
 public:
-    ImGUIManager(World* _world, Camera* _camera, int* _renderDistance, Player* _player);
+    ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player);
     ~ImGUIManager();
     void drawImGUIElements(float deltaTime);
 private:
-    World* world;
-    Camera* camera;
-    Player* player;
-    EntityManager* entityManager;
+    World& world;
+    Camera& camera;
+    Player& player;
+    EntityManager& entityManager;
 
     bool wireframe = false;
-    int* renderDistance;
+    int& renderDistance;
 
     std::string formatNumber(int number);
 };

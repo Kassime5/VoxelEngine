@@ -13,7 +13,7 @@ Player::Player(const glm::vec3& startPosition)
     updateBoundingBox();
 }
 
-void Player::update(float deltaTime, World* world) {
+void Player::update(float deltaTime, World& world) {
     if (!flying) {
         applyGravity(deltaTime);
     }
@@ -127,7 +127,7 @@ void Player::deactivateFlying() {
     flying = false;
 }
 
-void Player::resolveCollisionAxis(float& delta, int axis, World* world) {
+void Player::resolveCollisionAxis(float& delta, int axis, World& world) {
     if (delta == 0.0f) return;
 
     if (flying) {
@@ -159,7 +159,7 @@ void Player::resolveCollisionAxis(float& delta, int axis, World* world) {
     for (int x = minX; x <= maxX; x++) {
         for (int y = minY; y <= maxY; y++) {
             for (int z = minZ; z <= maxZ; z++) {
-                BlockType block = world->getBlock(x, y, z);
+                BlockType block = world.getBlock(x, y, z);
 
                 if (isBlockSolid(block)) {
                     AABB blockBox{

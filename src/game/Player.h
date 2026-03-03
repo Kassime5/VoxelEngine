@@ -16,7 +16,7 @@ class Player {
 public:
     Player(const glm::vec3& startPosition);
 
-    void update(float deltaTime, World* world);
+    void update(float deltaTime, World& world);
     void processMovement(bool forward, bool backward, bool left, bool right, bool sprinting, float deltaTime);
     void applyFriction(float deltaTime);
     void processVerticalInput(bool ascending, bool descending, float deltaTime);
@@ -58,7 +58,7 @@ private:
 
     // Collision
     void applyGravity(float deltaTime);
-    void resolveCollisionAxis(float& delta, int axis, World* world);
+    void resolveCollisionAxis(float& delta, int axis, World& world);
     void updateBoundingBox();
     void updateCamera();
 

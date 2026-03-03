@@ -7,14 +7,11 @@
 #include "src/game/Player.h"
 
 
-ImGUIManager::ImGUIManager(World* _world, Camera* _camera, int* _renderDistance, Player* _player)
-{
-    world = _world;
-    camera = _camera;
-    renderDistance = _renderDistance;
-    player = _player;
-    entityManager = world->getEntityManager();
-}
+ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player) :
+    world(_world), camera(_camera),
+    player(_player), entityManager(*_world.getEntityManager()),
+    renderDistance(_renderDistance)
+{}
 
 ImGUIManager::~ImGUIManager() {}
 
@@ -46,17 +43,17 @@ void ImGUIManager::drawImGUIElements(float deltaTime)
     ImGui::Text("Rendered: %d", stats.getChunksRendered());
     ImGui::Text("Skipped: %d", stats.getChunksSkipped());
     ImGui::Text("Culled: %d", stats.getChunksCulled());
-    ImGui::Text("Total Loaded: %d", world->getLoadedChunkCount());
+    ImGui::Text("Total Loaded: %d", world.getLoadedChunkCount());
 
     // More world stuff
     ImGui::SeparatorText("World");
-    ImGui::Text("Entity count: %d", entityManager->getEntityCount());
+    ImGui::Text("Entity count: %d", entityManager.getEntityCount());
 
     // Player stats
     ImGui::SeparatorText("Player");
-    ImGui::Text("XYZ: %.1f, %.1f, %.1f", camera->Position.x, camera->Position.y, camera->Position.z);
-    ImGui::Text("Facing: %s", camera->facingCardinalDirection().c_str());
-    ImGui::Text("Current Biome: %s", world->getCurrentPlayerBiome(camera->Position.x, camera->Position.z)->getName().c_str());
+    ImGui::Text("XYZ: %.1f, %.1f, %.1f", camera.Position.x, camera.Position.y, camera.Position.z);
+    ImGui::Text("Facing: %s", camera.facingCardinalDirection().c_str());
+    ImGui::Text("Current Biome: %s", world.getCurrentPlayerBiome(camera.Position.x, camera.Position.z)->getName().c_str());
 
     // Memory estimate
     ImGui::SeparatorText("Memory (Estimate)");
@@ -68,8 +65,8 @@ void ImGUIManager::drawImGUIElements(float deltaTime)
 
     // Settings
     ImGui::SeparatorText("Settings");
-    if (ImGui::SliderInt("Render Distance", renderDistance, 2, 32)) {
-        world->setRenderDistance(*renderDistance);
+    if (ImGui::SliderInt("Render Distance", &renderDistance, 2, 32)) {
+        world.setRenderDistance(renderDistance);
     }
 
     ImGui::Checkbox("Wireframe", &wireframe);

@@ -22,7 +22,6 @@
 #include <algorithm>
 #include <cmath>
 #include "src/debug/RenderStats.h"
-#include "src/game/Player.h"
 #include "src/rendering/Camera.h"
 #include "src/rendering/ShaderManager.h"
 #include "WorleyBiome.h"
@@ -52,7 +51,7 @@ struct RaycastResult {
 
 class World {
 public:
-    World(Player* _player);
+    World(Player& _player);
     ~World();
 
     bool loadTextureAtlas(const char* atlasPath, int tilesPerRow = 16);
@@ -75,7 +74,7 @@ public:
     EntityManager* getEntityManager() { return &entityManager; }
 
 private:
-    Player* player;
+    Player& player;
     Shader* terrainShader;
 
     void render();
@@ -87,16 +86,16 @@ private:
     glm::ivec3 lastCameraChunkPos;
 
     // Thread pool
-    std::vector<std::thread> generationThreads;
+    std::vector<std::jthread> generationThreads;
     std::queue<ChunkGenerationTask> generationQueue;
     std::mutex generationQueueMutex;
-    std::condition_variable generationQueueCV;
+    std::condition_variable_any generationQueueCV;
 
     // Thread pool for mesh building
-    std::vector<std::thread> meshBuildThreads;
+    std::vector<std::jthread> meshBuildThreads;
     std::queue<ChunkMeshTask> meshBuildQueue;
     std::mutex meshBuildQueueMutex;
-    std::condition_variable meshBuildQueueCV;
+    std::condition_variable_any meshBuildQueueCV;
 
     // GPU upload queue (processed on main thread)
     std::queue<ChunkMeshTask> gpuUploadQueue;
@@ -106,19 +105,16 @@ private:
     std::mutex pendingEntitySpawnsMutex;
     void processPendingEntitySpawns(int maxPerFrame);
 
-
-    std::atomic<bool> stopThreads;
-
     void initThreadPool(int _generationThreads, int _meshThreads);
     void shutdownThreadPool();
-    void generationWorkerThread();
-    void meshBuildWorkerThread();
+    void generationWorkerThread(std::stop_token stopToken);
+    void meshBuildWorkerThread(std::stop_token stopToken);
     void processGPUUploadQueue(int maxPerFrame);
 
     // Noise
     const siv::PerlinNoise::seed_type seed;
     const siv::PerlinNoise perlinNoise;
-    WorleyBiome* worleyBiome;
+    std::unique_ptr<WorleyBiome> worleyBiome;
 
     glm::ivec3 worldToChunkPos(int worldX, int worldY, int worldZ) const;
     glm::ivec3 worldToLocalPos(int worldX, int worldY, int worldZ) const;

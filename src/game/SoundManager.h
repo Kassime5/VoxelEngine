@@ -17,7 +17,7 @@
 
 class SoundManager {
 public:
-    SoundManager(Player* _player);
+    SoundManager(Player& _player);
     ~SoundManager();
 
     bool initialize();
@@ -46,7 +46,7 @@ public:
 private:
     ALCdevice* device;
     ALCcontext* context;
-    Player* player;
+    Player& player;
 
     std::vector<ALuint> sources;
     std::unordered_map<std::string, ALuint> buffers;
