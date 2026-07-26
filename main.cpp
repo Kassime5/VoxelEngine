@@ -15,8 +15,10 @@
 #include "src/debug/RenderStats.h"
 #include "src/game/Player.h"
 #include "src/game/HighlightBox.h"
+#include "src/game/HUDRenderer.h"
 #include "src/game/SoundManager.h"
 #include "src/input/PlayerController.h"
+#include "src/rendering/ChunkRenderer.h"
 #include "src/rendering/ShaderManager.h"
 #include "src/rendering/Skybox.h"
 #include "thirdparty/AL/al.h"
@@ -41,7 +43,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // Creation of all the stuff, prob need to move to an actual game manager or smth
-    Player player(glm::vec3(0, 300, 0));
+    Player player(glm::vec3(0, 200, 0));
     auto window = std::make_unique<Window>(SCR_WIDTH, SCR_HEIGHT, "OpenGL");
 
     auto soundManager = std::make_unique<SoundManager>(player);
@@ -65,14 +67,22 @@ int main() {
         return -1;
     }
 
+    HUDRenderer hudRenderer(SCR_WIDTH, SCR_HEIGHT);
+
     Skybox skybox;
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Create world and load texture atlas
-    auto world = std::make_unique<World>(player);
+    // Renderer owns the terrain shader and atlas; World borrows the atlas for meshing,
+    // so the renderer has to be constructed first and outlive the world.
+    auto chunkRenderer = std::make_unique<ChunkRenderer>();
+    if (!chunkRenderer->loadTextureAtlas("assets/textures/atlas2.png", 8)) {
+        std::cerr << "Failed to load texture atlas!" << std::endl;
+    }
+
+    auto world = std::make_unique<World>(player, chunkRenderer->getTextureAtlas());
     world->setRenderDistance(renderDistance);
 
     PlayerController playerController(&player, (world.get()));
@@ -114,7 +124,9 @@ int main() {
             (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
         glm::mat4 view = player.getCamera().GetViewMatrix();
 
-        world->renderWorld(projection, view);
+        chunkRenderer->render(*world, projection, view);
+        entityManager->render(projection, view);
+        entityManager->renderDebug(projection, view);
 
         highlightedBlock = world->raycastBlock(player.getCamera().Position, player.getFront(), 5.0f);
         if (highlightedBlock.hit) {
@@ -122,6 +134,7 @@ int main() {
         }
 
         skybox.draw(player.getCamera().GetViewMatrix(), projection);
+        hudRenderer.drawCrosshair();
 
         imGUIManager->drawImGUIElements(deltaTime);
         glfwSwapBuffers(*window);

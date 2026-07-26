@@ -113,7 +113,11 @@ add_executable(GLFWVoxel main.cpp
         src/rendering/Meshes/Model.h
         src/rendering/Meshes/ModelManager.cpp
         src/rendering/Meshes/ModelManager.h
-        src/game/DebugHitBox.h)
+        src/game/DebugHitBox.h
+        src/game/HUDRenderer.h
+        src/rendering/Frustum.h
+        src/rendering/ChunkRenderer.cpp
+        src/rendering/ChunkRenderer.h)
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 

@@ -29,6 +29,8 @@ public:
     std::vector<Entity*> getEntitiesInRadius(const glm::vec3& pos, float radius);
     int getEntityCount() const { return entities.size(); }
 
+    std::vector<Entity*> getEntitiesInChunk(const glm::ivec3& chunkPos) const;
+
     void toggleHitboxes() { showHitboxes = !showHitboxes; }
 private:
     DebugHitbox debugHitbox;

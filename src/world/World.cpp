@@ -5,22 +5,12 @@
 #include "World.h"
 #include "src/game/Player.h"
 
-World::World(Player& _player)
-    : player(_player), renderDistance(8), lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX),
-      seed(12345), perlinNoise(seed)
+World::World(Player& _player, const TextureAtlas& _textureAtlas)
+    : player(_player), textureAtlas(_textureAtlas), renderDistance(8),
+      lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX), seed(12345), perlinNoise(seed)
 {
     worleyBiome = std::make_unique<WorleyBiome>(seed, 384);
     initThreadPool(6, 6);
-
-    ShaderManager& sm = ShaderManager::getInstance();
-    sm.addShader("terrain", "assets/shader/terrain/terrain.vs.glsl",
-                 "assets/shader/terrain/terrain.fs.glsl");
-    terrainShader = sm.getShader("terrain");
-
-    if (!loadTextureAtlas("assets/textures/atlas2.png", 8))
-    {
-        std::cerr << "Failed to load texture atlas!" << std::endl;
-    }
 }
 
 World::~World() {
@@ -183,10 +173,6 @@ void World::processGPUUploadQueue(int maxPerFrame) {
     }
 }
 
-bool World::loadTextureAtlas(const char* atlasPath, int tilesPerRow) {
-    return textureAtlas.load(atlasPath, tilesPerRow);
-}
-
 void World::update(const glm::vec3& cameraPosition) {
     PROFILE_FUNCTION();
 
@@ -216,82 +202,6 @@ void World::update(const glm::vec3& cameraPosition) {
     }
 }
 
-void World::renderWorld(glm::mat4 projection, glm::mat4 view) {
-    terrainShader->use();
-    terrainShader->setFloat("tilesPerRow", 8.0f);
-    terrainShader->setInt("texture1", 0);
-
-    // TODO: Change where the lightsource is
-    terrainShader->setVec3("lightPos", glm::vec3(0.0f, 50.0f, 0.0f));
-    terrainShader->setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
-    terrainShader->setMat4("projection", projection);
-    terrainShader->setMat4("view", view);
-
-    render();
-    renderTransparent();
-
-    entityManager.render(projection, view);
-    entityManager.renderDebug(projection, view);
-}
-
-void World::render() {
-    glm::mat4 viewProj = player.getCamera().GetProjectionMatrix() * player.getCamera().GetViewMatrix();
-
-    Frustum frustum;
-    frustum.extractFromMatrix(viewProj);
-
-    textureAtlas.bind(0);
-    constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
-    constexpr float chunkHeight = static_cast<float>(Chunk::HEIGHT);
-
-    for (const auto& [chunkPos, chunk] : m_chunks) {
-        glm::vec3 worldPos(chunkPos.x * chunkSize, chunkPos.y, chunkPos.z * chunkSize);
-        glm::vec3 chunkMin = worldPos;
-        glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize, chunkHeight, chunkSize);
-
-        if (!frustum.isBoxInFrustum(chunkMin, chunkMax)) {
-            RenderStats::getInstance().addChunkCulled();
-            continue;
-        }
-
-        terrainShader->setVec3("chunkOffset", worldPos);
-        RenderStats::getInstance().addChunkRendered();
-        chunk->draw();
-    }
-}
-
-void World::renderTransparent() {
-    glm::mat4 viewProj = player.getCamera().GetProjectionMatrix() * player.getCamera().GetViewMatrix();
-    Frustum frustum;
-    frustum.extractFromMatrix(viewProj);
-
-    // textureAtlas.bind(0);
-    constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
-    constexpr float chunkHeight = static_cast<float>(Chunk::HEIGHT);
-
-    glDisable(GL_CULL_FACE);
-    glDepthMask(GL_FALSE);
-
-    for (const auto& [chunkPos, chunk] : m_chunks) {
-        if (chunk->isTransparentMeshEmpty())
-            continue;
-
-        glm::vec3 worldPos(chunkPos.x * chunkSize, chunkPos.y, chunkPos.z * chunkSize);
-        glm::vec3 chunkMin = worldPos;
-        glm::vec3 chunkMax = worldPos + glm::vec3(chunkSize, chunkHeight, chunkSize);
-
-        if (!frustum.isBoxInFrustum(chunkMin, chunkMax)) {
-            continue;
-        }
-
-        terrainShader->setVec3("chunkOffset", worldPos);
-        chunk->drawTransparent();
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_CULL_FACE);
-}
-
 BlockType World::getBlock(int worldX, int worldY, int worldZ) {
     glm::ivec3 chunkPos = worldToChunkPos(worldX, worldY, worldZ);
     Chunk* chunk = getChunk(chunkPos);
@@ -308,6 +218,25 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
     Chunk* chunk = getChunk(chunkPos);
     if (!chunk) return;
 
+    // Only check occupation when placing blocks
+    if (type != BlockType::Air) {
+        AABB blockBox{
+            glm::vec3(worldX, worldY, worldZ),
+            glm::vec3(worldX + 1, worldY + 1, worldZ + 1)
+        };
+
+        if (player.getBoundingBox().intersects(blockBox)) {
+            return;
+        }
+
+        std::vector<Entity*> entitiesInChunk = entityManager.getEntitiesInChunk(chunkPos);
+        for (Entity* entity : entitiesInChunk) {
+            if (entity->getBoundingBox().intersects(blockBox)) {
+                return;
+            }
+        }
+    }
+
     glm::ivec3 localPos = worldToLocalPos(worldX, worldY, worldZ);
     chunk->setBlock(localPos.x, localPos.y, localPos.z, type);
 
@@ -319,7 +248,6 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
         meshBuildQueueCV.notify_one();
     }
 }
-
 Chunk* World::getChunk(const glm::ivec3& chunkPos) {
     auto it = m_chunks.find(chunkPos);
     return (it != m_chunks.end()) ? it->second.get() : nullptr;

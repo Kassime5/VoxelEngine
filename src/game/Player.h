@@ -36,6 +36,8 @@ public:
 
     void jump();
 
+    const AABB& getBoundingBox() const { return boundingBox; }
+
 private:
     glm::vec3 position;
     glm::vec3 velocity;

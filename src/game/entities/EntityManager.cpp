@@ -100,6 +100,26 @@ void EntityManager::spawnAnimalsInChunk(const glm::ivec3& chunkPos, World* world
     }
 }
 
+std::vector<Entity*> EntityManager::getEntitiesInChunk(const glm::ivec3& chunkPos) const {
+    std::vector<Entity*> result;
+
+    constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
+    float minX = static_cast<float>(chunkPos.x) * chunkSize;
+    float minZ = static_cast<float>(chunkPos.z) * chunkSize;
+    float maxX = minX + chunkSize;
+    float maxZ = minZ + chunkSize;
+
+    for (auto& entity : entities) {
+        if (!entity) continue;
+        glm::vec3 pos = entity->getPosition();
+        if (pos.x >= minX && pos.x < maxX && pos.z >= minZ && pos.z < maxZ) {
+            result.push_back(entity.get());
+        }
+    }
+
+    return result;
+}
+
 void EntityManager::updateSpatialGrid() {
     spatialGrid.clear();
     for (auto& entity : entities) {

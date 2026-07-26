@@ -7,7 +7,6 @@
 
 #include "Block.h"
 #include "Chunk.h"
-#include "../rendering/Shader.h"
 #include "../rendering/TextureAltas.h"
 #include <unordered_map>
 #include <memory>
@@ -21,9 +20,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
-#include "src/debug/RenderStats.h"
-#include "src/rendering/Camera.h"
-#include "src/rendering/ShaderManager.h"
 #include "WorleyBiome.h"
 #include "PerlinNoise/PerlinNoise.hpp"
 #include "../rendering/Profiler.h"
@@ -49,15 +45,18 @@ struct RaycastResult {
     glm::vec3 hitNormal;
 };
 
+using ChunkMap = std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash>;
+
 class World {
 public:
-    World(Player& _player);
+    // textureAtlas is borrowed, not owned -- it belongs to ChunkRenderer and must
+    // outlive this World. Mesh worker threads read UVs from it.
+    World(Player& _player, const TextureAtlas& _textureAtlas);
     ~World();
 
-    bool loadTextureAtlas(const char* atlasPath, int tilesPerRow = 16);
     void update(const glm::vec3& cameraPosition);
 
-    void renderWorld(glm::mat4 projection, glm::mat4 view);
+    const ChunkMap& getChunks() const { return m_chunks; }
 
     BlockType getBlock(int worldX, int worldY, int worldZ);
     void setBlock(int worldX, int worldY, int worldZ, BlockType type);
@@ -75,13 +74,9 @@ public:
 
 private:
     Player& player;
-    Shader* terrainShader;
 
-    void render();
-    void renderTransparent();
-
-    std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash> m_chunks;
-    TextureAtlas textureAtlas;
+    ChunkMap m_chunks;
+    const TextureAtlas& textureAtlas;
     int renderDistance;
     glm::ivec3 lastCameraChunkPos;
 
@@ -124,74 +119,6 @@ private:
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
 
     EntityManager entityManager;
-};
-
-struct Frustum {
-    glm::vec4 planes[6]; // left, right, bottom, top, near, far
-
-    void extractFromMatrix(const glm::mat4& viewProj) {
-        planes[0] = glm::vec4(
-            viewProj[0][3] + viewProj[0][0],
-            viewProj[1][3] + viewProj[1][0],
-            viewProj[2][3] + viewProj[2][0],
-            viewProj[3][3] + viewProj[3][0]
-        );
-
-        planes[1] = glm::vec4(
-            viewProj[0][3] - viewProj[0][0],
-            viewProj[1][3] - viewProj[1][0],
-            viewProj[2][3] - viewProj[2][0],
-            viewProj[3][3] - viewProj[3][0]
-        );
-
-        planes[2] = glm::vec4(
-            viewProj[0][3] + viewProj[0][1],
-            viewProj[1][3] + viewProj[1][1],
-            viewProj[2][3] + viewProj[2][1],
-            viewProj[3][3] + viewProj[3][1]
-        );
-
-        planes[3] = glm::vec4(
-            viewProj[0][3] - viewProj[0][1],
-            viewProj[1][3] - viewProj[1][1],
-            viewProj[2][3] - viewProj[2][1],
-            viewProj[3][3] - viewProj[3][1]
-        );
-
-        planes[4] = glm::vec4(
-            viewProj[0][3] + viewProj[0][2],
-            viewProj[1][3] + viewProj[1][2],
-            viewProj[2][3] + viewProj[2][2],
-            viewProj[3][3] + viewProj[3][2]
-        );
-
-        planes[5] = glm::vec4(
-            viewProj[0][3] - viewProj[0][2],
-            viewProj[1][3] - viewProj[1][2],
-            viewProj[2][3] - viewProj[2][2],
-            viewProj[3][3] - viewProj[3][2]
-        );
-
-        for (int i = 0; i < 6; i++) {
-            float length = glm::length(glm::vec3(planes[i]));
-            planes[i] /= length;
-        }
-    }
-
-    bool isBoxInFrustum(const glm::vec3& min, const glm::vec3& max) const {
-        for (int i = 0; i < 6; i++) {
-            glm::vec3 positiveVertex(
-                planes[i].x > 0 ? max.x : min.x,
-                planes[i].y > 0 ? max.y : min.y,
-                planes[i].z > 0 ? max.z : min.z
-            );
-
-            if (glm::dot(glm::vec3(planes[i]), positiveVertex) + planes[i].w < 0) {
-                return false;
-            }
-        }
-        return true;
-    }
 };
 
 #endif //GLFWVOXEL_WORLD_H

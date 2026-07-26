@@ -50,7 +50,7 @@ void PlayerController::processMovementInput(float deltaTime) {
         bool descending = input.isActionHeld(GameAction::Descend);
         player->processVerticalInput(ascending, descending, deltaTime);
     } else {
-        if (input.isActionPressed(GameAction::Jump)) {
+        if (input.isActionHeld(GameAction::Jump)) {
             player->jump();
         }
 
@@ -86,16 +86,17 @@ void PlayerController::processInteractionInput() {
 
     RaycastResult target = getTargetedBlock();
 
-    if (input.isActionPressed(GameAction::SecondaryAction)) {
+    // TODO: Add delay (like an attack speed)
+    if (input.isActionHeld(GameAction::PrimaryAction)) {
         if (target.hit) {
-            glm::ivec3 placePos = target.hitPos - target.hitNormal;
-            world->setBlock(placePos.x, placePos.y, placePos.z, BlockType::Grass);
+            world->setBlock(target.hitPos.x, target.hitPos.y, target.hitPos.z, BlockType::Air);
         }
     }
 
-    if (input.isActionPressed(GameAction::PrimaryAction)) {
+    if (input.isActionHeld(GameAction::SecondaryAction)) {
         if (target.hit) {
-            world->setBlock(target.hitPos.x, target.hitPos.y, target.hitPos.z, BlockType::Air);
+            glm::ivec3 placePos = target.hitPos - target.hitNormal;
+            world->setBlock(placePos.x, placePos.y, placePos.z, BlockType::Grass);
         }
     }
 
