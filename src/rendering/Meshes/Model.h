@@ -7,9 +7,10 @@
 
 #include "src/rendering/Shader.h"
 #include "src/rendering/Meshes/ModelMesh.h"
-#include "assimp/material.h"
-#include "assimp/scene.h"
 #include "src/stb_image.h"
+
+#include <string>
+#include <vector>
 
 
 unsigned int TextureFromFile(const char* path, const std::string& directory);
@@ -29,10 +30,8 @@ private:
     std::vector<MeshTexture> textures_loaded;
     bool gammaCorrection;
 
-    void loadModel(std::string path);
-    void processNode(aiNode *node, const aiScene *scene);
-    ModelMesh processMesh(aiMesh *mesh, const aiScene *scene);
-    std::vector<MeshTexture> loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName);
+    void loadModel(const std::string& path);
+    std::vector<MeshTexture> loadDiffuseTexture(const std::string& file);
 };
 
 

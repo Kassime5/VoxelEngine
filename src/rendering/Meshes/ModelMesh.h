@@ -5,7 +5,7 @@
 #ifndef GLFWVOXEL_MODELMESH_H
 #define GLFWVOXEL_MODELMESH_H
 
-#include <glad/glad.h>
+#include "src/core/GL.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 

@@ -5,7 +5,7 @@
 #ifndef GLFWVOXEL_INPUTMANAGER_H
 #define GLFWVOXEL_INPUTMANAGER_H
 
-#include <glad/glad.h>
+#include "src/core/GL.h"
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <unordered_map>

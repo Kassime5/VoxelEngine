@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 #include <queue>
+#include <chrono>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -68,6 +69,7 @@ public:
     int getRenderDistance() const { return renderDistance; }
     int getLoadedChunkCount() const { return m_chunks.size(); }
     const Biome* getCurrentPlayerBiome(float cameraX, float cameraZ) const;
+    bool hasTerrainAt(int worldX, int worldZ);
     RaycastResult raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance = 10.0f);
 
     EntityManager* getEntityManager() { return &entityManager; }
@@ -105,6 +107,9 @@ private:
     void generationWorkerThread(std::stop_token stopToken);
     void meshBuildWorkerThread(std::stop_token stopToken);
     void processGPUUploadQueue(int maxPerFrame);
+    bool processOneGenerationTask();
+    bool processOneMeshBuildTask();
+    void pumpChunkWork(std::chrono::microseconds budget);
 
     // Noise
     const siv::PerlinNoise::seed_type seed;

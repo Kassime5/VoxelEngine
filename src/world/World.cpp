@@ -5,12 +5,21 @@
 #include "World.h"
 #include "src/game/Player.h"
 
+namespace {
+#ifdef GLFWVOXEL_SINGLE_THREADED
+    // to avoid hangs on single threads
+    constexpr std::chrono::microseconds CHUNK_WORK_BUDGET{6000};
+#endif
+}
+
 World::World(Player& _player, const TextureAtlas& _textureAtlas)
     : player(_player), textureAtlas(_textureAtlas), renderDistance(8),
       lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX), seed(12345), perlinNoise(seed)
 {
     worleyBiome = std::make_unique<WorleyBiome>(seed, 384);
+#ifndef GLFWVOXEL_SINGLE_THREADED
     initThreadPool(6, 6);
+#endif
 }
 
 World::~World() {
@@ -19,10 +28,14 @@ World::~World() {
 
 void World::initThreadPool(int _generationThreads, int _meshThreads) {
     for (int i = 0; i < _generationThreads; i++) {
-        generationThreads.emplace_back(&World::generationWorkerThread, this);
+        generationThreads.emplace_back([this](std::stop_token stopToken) {
+            generationWorkerThread(std::move(stopToken));
+        });
     }
     for (int i = 0; i < _meshThreads; i++) {
-        meshBuildThreads.emplace_back(&World::meshBuildWorkerThread, this);
+        meshBuildThreads.emplace_back([this](std::stop_token stopToken) {
+            meshBuildWorkerThread(std::move(stopToken));
+        });
     }
 }
 
@@ -52,40 +65,56 @@ void World::shutdownThreadPool() {
     }
 }
 
+bool World::processOneGenerationTask() {
+    ChunkGenerationTask task;
+    {
+        std::lock_guard<std::mutex> lock(generationQueueMutex);
+        if (generationQueue.empty()) {
+            return false;
+        }
+        task = generationQueue.front();
+        generationQueue.pop();
+    }
+
+    // A task for a chunk that has since been unloaded still counts as consumed, so the
+    // caller keeps draining rather than treating it as an empty queue.
+    if (isChunkLoaded(task.chunkPos)) {
+        task.chunk->setState(ChunkState::Generating);
+        task.chunk->generate(&perlinNoise, worleyBiome.get());
+
+        {
+            std::lock_guard<std::mutex> lock(pendingEntitySpawnsMutex);
+            pendingEntitySpawns.push(task.chunkPos);
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
+            meshBuildQueue.push({task.chunk, MeshData(), MeshData()});
+        }
+        meshBuildQueueCV.notify_one();
+    }
+
+    return true;
+}
+
 void World::generationWorkerThread(std::stop_token stopToken) {
     while (!stopToken.stop_requested()) {
-        ChunkGenerationTask task;
         {
             std::unique_lock<std::mutex> lock(generationQueueMutex);
             generationQueueCV.wait(lock, stopToken, [this] {
                 return !generationQueue.empty();
             });
-
-            if (stopToken.stop_requested() && generationQueue.empty()) return;
-
-            if (!generationQueue.empty()) {
-                task = generationQueue.front();
-                generationQueue.pop();
-            } else {
-                continue;
-            }
         }
 
-        if (isChunkLoaded(task.chunkPos)) {
-            task.chunk->setState(ChunkState::Generating);
-            task.chunk->generate(&perlinNoise, worleyBiome.get());
-
-            {
-                std::lock_guard<std::mutex> lock(pendingEntitySpawnsMutex);
-                pendingEntitySpawns.push(task.chunkPos);
-            }
-
-            {
-                std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
-                meshBuildQueue.push({task.chunk, MeshData(), MeshData()});
-            }
-            meshBuildQueueCV.notify_one();
+        // shutdownThreadPool() clears the queues right after requesting a stop, so there
+        // is nothing left worth draining here.
+        if (stopToken.stop_requested()) {
+            return;
         }
+
+        // May lose the race to another worker, in which case this is a no-op and the
+        // loop goes back to waiting.
+        processOneGenerationTask();
     }
 }
 
@@ -108,45 +137,71 @@ void World::processPendingEntitySpawns(int maxPerFrame) {
     }
 }
 
+bool World::processOneMeshBuildTask() {
+    ChunkMeshTask task;
+    {
+        std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
+        if (meshBuildQueue.empty()) {
+            return false;
+        }
+        task = meshBuildQueue.front();
+        meshBuildQueue.pop();
+    }
+
+    const glm::ivec3 chunkPos = task.chunk->getPosition();
+    if (!isChunkLoaded(chunkPos)) {
+        return true;
+    }
+
+    const ChunkState currentState = task.chunk->getState();
+    if (currentState == ChunkState::Generated || currentState == ChunkState::BuildingMesh) {
+        task.chunk->setState(ChunkState::BuildingMesh);
+        task.chunk->buildMeshData(task.meshData, &textureAtlas, this);
+        task.chunk->buildTransparentMeshData(task.transparentMeshData, &textureAtlas);
+
+        // Re-checked because the chunk can be unloaded while the mesh is being built.
+        if (isChunkLoaded(chunkPos)) {
+            task.chunk->setState(ChunkState::MeshBuilt);
+            {
+                std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
+                gpuUploadQueue.push(std::move(task));
+            }
+        }
+    }
+
+    return true;
+}
+
 void World::meshBuildWorkerThread(std::stop_token stopToken) {
     while (!stopToken.stop_requested()) {
-        ChunkMeshTask task;
-
         {
             std::unique_lock<std::mutex> lock(meshBuildQueueMutex);
             meshBuildQueueCV.wait(lock, stopToken, [this] {
                 return !meshBuildQueue.empty();
             });
-
-            if (stopToken.stop_requested() && meshBuildQueue.empty()) return;
-
-            if (!meshBuildQueue.empty()) {
-                task = meshBuildQueue.front();
-                meshBuildQueue.pop();
-            } else {
-                continue;
-            }
         }
 
-        glm::ivec3 chunkPos = task.chunk->getPosition();
-
-        if (!isChunkLoaded(chunkPos)) {
-            continue;
+        if (stopToken.stop_requested()) {
+            return;
         }
 
-        ChunkState currentState = task.chunk->getState();
-        if (currentState == ChunkState::Generated || currentState == ChunkState::BuildingMesh) {
-            task.chunk->setState(ChunkState::BuildingMesh);
-            task.chunk->buildMeshData(task.meshData, &textureAtlas, this);
-            task.chunk->buildTransparentMeshData(task.transparentMeshData, &textureAtlas);
+        processOneMeshBuildTask();
+    }
+}
 
-            if (isChunkLoaded(chunkPos)) {
-                task.chunk->setState(ChunkState::MeshBuilt);
-                {
-                    std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
-                    gpuUploadQueue.push(std::move(task));
-                }
-            }
+void World::pumpChunkWork(std::chrono::microseconds budget) {
+    PROFILE_SCOPE("World::pumpChunkWork");
+
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+
+    while (true) {
+        // Meshing first: generation feeds it, and meshing is what turns a generated
+        // chunk into something the renderer can actually draw.
+        if (!processOneMeshBuildTask() && !processOneGenerationTask()) {
+            return;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return;
         }
     }
 }
@@ -190,6 +245,10 @@ void World::update(const glm::vec3& cameraPosition) {
             lastCameraChunkPos = currentChunkPos;
         }
     }
+
+#ifdef GLFWVOXEL_SINGLE_THREADED
+    pumpChunkWork(CHUNK_WORK_BUDGET);
+#endif
 
     {
         PROFILE_SCOPE("World::update - GPU uploads");
@@ -256,6 +315,11 @@ Chunk* World::getChunk(const glm::ivec3& chunkPos) {
 Chunk* World::getChunkAt(int worldX, int worldY, int worldZ) {
     glm::ivec3 chunkPos = worldToChunkPos(worldX, worldY, worldZ);
     return getChunk(chunkPos);
+}
+
+bool World::hasTerrainAt(int worldX, int worldZ) {
+    const Chunk* chunk = getChunk(worldToChunkPos(worldX, 0, worldZ));
+    return chunk != nullptr && chunk->getState() >= ChunkState::Generated;
 }
 
 glm::ivec3 World::worldToChunkPos(int worldX, int worldY, int worldZ) const {

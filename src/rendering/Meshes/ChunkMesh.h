@@ -4,7 +4,6 @@
 
 #ifndef GLFWVOXEL_CHUNKMESH_H
 #define GLFWVOXEL_CHUNKMESH_H
-#include <glad/glad.h>
 #include <vector>
 #include <glm/glm.hpp>
 

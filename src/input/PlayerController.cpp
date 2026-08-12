@@ -86,14 +86,14 @@ void PlayerController::processInteractionInput() {
 
     RaycastResult target = getTargetedBlock();
 
-    // TODO: Add delay (like an attack speed)
-    if (input.isActionHeld(GameAction::PrimaryAction)) {
+    // TODO: Change back to isActionHeld and add a delay to it
+    if (input.isActionPressed(GameAction::PrimaryAction)) {
         if (target.hit) {
             world->setBlock(target.hitPos.x, target.hitPos.y, target.hitPos.z, BlockType::Air);
         }
     }
 
-    if (input.isActionHeld(GameAction::SecondaryAction)) {
+    if (input.isActionPressed(GameAction::SecondaryAction)) {
         if (target.hit) {
             glm::ivec3 placePos = target.hitPos - target.hitNormal;
             world->setBlock(placePos.x, placePos.y, placePos.z, BlockType::Grass);

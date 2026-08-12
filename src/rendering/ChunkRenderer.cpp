@@ -4,7 +4,7 @@
 
 #include "ChunkRenderer.h"
 
-#include <glad/glad.h>
+#include "src/core/GL.h"
 #include <iostream>
 
 #include "Profiler.h"

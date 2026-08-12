@@ -5,7 +5,7 @@
 #ifndef GLFWVOXEL_DEBUGHITBOX_H
 #define GLFWVOXEL_DEBUGHITBOX_H
 
-#include <glad/glad.h>
+#include "src/core/GL.h"
 #include <glm/glm.hpp>
 #include <vector>
 

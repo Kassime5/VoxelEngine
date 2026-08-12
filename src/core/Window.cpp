@@ -13,7 +13,10 @@ Window::Window(unsigned int width, unsigned int height, const char *name, GLFWmo
 }
 
 Window::~Window() {
-    delete &window;
+    if (window != nullptr) {
+        glfwDestroyWindow(window);
+        window = nullptr;
+    }
 }
 
 void Window::setInputMode(int mode, int value) const {

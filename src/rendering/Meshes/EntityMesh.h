@@ -5,7 +5,7 @@
 #ifndef GLFWVOXEL_ENTITYMESH_H
 #define GLFWVOXEL_ENTITYMESH_H
 
-#include <glad/glad.h>
+#include "src/core/GL.h"
 #include <vector>
 #include <glm/glm.hpp>
 

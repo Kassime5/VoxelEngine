@@ -5,7 +5,7 @@
 #ifndef GLFWVOXEL_HIGHLIGHTBOX_H
 #define GLFWVOXEL_HIGHLIGHTBOX_H
 
-#include <glad/glad.h>
+#include "src/core/GL.h"
 #include <glm/glm.hpp>
 
 #include "src/rendering/ShaderManager.h"

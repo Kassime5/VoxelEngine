@@ -3,8 +3,12 @@
 //
 
 #include "Model.h"
-#include "assimp/Importer.hpp"
-#include "assimp/postprocess.h"
+
+#include <array>
+#include <fstream>
+#include <map>
+#include <sstream>
+#include <unordered_map>
 
 unsigned int TextureFromFile(const char* path, const std::string& directory)
 {
@@ -52,150 +56,210 @@ void Model::Draw(Shader& shader)
         meshes[i].Draw(shader);
 }
 
-void Model::loadModel(std::string path)
-{
-    Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
+namespace {
 
-    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
-    {
-        std::cout << "ERROR::ASSIMP:: " << importer.GetErrorString() << std::endl;
+// One corner of an OBJ face, resolved to 0-based indices into the position / uv / normal
+// arrays. -1 means the field was absent from the token.
+struct Corner {
+    int v = -1;
+    int vt = -1;
+    int vn = -1;
+};
+
+// OBJ indices are 1-based, and a negative value counts back from the end of whatever has
+// been parsed so far rather than from the end of the file.
+int resolveIndex(int raw, std::size_t count) {
+    if (raw > 0) {
+        return raw - 1;
+    }
+    if (raw < 0) {
+        return static_cast<int>(count) + raw;
+    }
+    return -1;
+}
+
+// Accepts every form the spec allows: "v", "v/vt", "v//vn" and "v/vt/vn".
+Corner parseCorner(const std::string& token, std::size_t positions, std::size_t uvs, std::size_t normals) {
+    int raw[3] = {0, 0, 0};
+
+    std::size_t start = 0;
+    for (int part = 0; part < 3; ++part) {
+        const std::size_t slash = token.find('/', start);
+        const std::string field = token.substr(
+            start, slash == std::string::npos ? std::string::npos : slash - start);
+
+        if (!field.empty()) {
+            raw[part] = std::stoi(field);
+        }
+        if (slash == std::string::npos) {
+            break;
+        }
+        start = slash + 1;
+    }
+
+    return { resolveIndex(raw[0], positions),
+             resolveIndex(raw[1], uvs),
+             resolveIndex(raw[2], normals) };
+}
+
+// Material name -> diffuse map filename, read from the .mtl's newmtl / map_Kd pairs.
+std::unordered_map<std::string, std::string> parseMaterialLibrary(const std::string& path) {
+    std::unordered_map<std::string, std::string> diffuseMaps;
+
+    std::ifstream file(path);
+    if (!file) {
+        std::cout << "WARNING::MODEL:: could not open material library " << path << std::endl;
+        return diffuseMaps;
+    }
+
+    std::string line;
+    std::string currentMaterial;
+    while (std::getline(file, line)) {
+        std::istringstream in(line);
+        std::string keyword;
+        in >> keyword;
+
+        if (keyword == "newmtl") {
+            in >> currentMaterial;
+        } else if (keyword == "map_Kd" && !currentMaterial.empty()) {
+            std::string mapFile;
+            in >> mapFile;
+            diffuseMaps[currentMaterial] = mapFile;
+        }
+    }
+
+    return diffuseMaps;
+}
+
+} // namespace
+
+void Model::loadModel(const std::string& path)
+{
+    std::ifstream file(path);
+    if (!file) {
+        std::cout << "ERROR::MODEL:: failed to open " << path << std::endl;
         return;
     }
 
-    directory = path.substr(0, path.find_last_of('/'));
+    const std::size_t lastSlash = path.find_last_of("/\\");
+    directory = lastSlash == std::string::npos ? std::string(".") : path.substr(0, lastSlash);
 
-    processNode(scene->mRootNode, scene);
-}
+    // Positions, UVs and normals are indexed file-globally in OBJ -- o/g groups only
+    // partition the faces -- so these accumulate across the entire file and are never
+    // cleared when a mesh is flushed.
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec2> uvs;
+    std::vector<glm::vec3> normals;
 
-void Model::processNode(aiNode* node, const aiScene* scene)
-{
-    for (unsigned int i = 0; i < node->mNumMeshes; i++)
-    {
-        // TODO: save name to use in animations ? or track player with head e.g.
-        //std::cout << "Mesh name: " << scene->mMeshes[node->mMeshes[i]]->mName.C_Str() << std::endl;
-        aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-        meshes.push_back(processMesh(mesh, scene));
-    }
+    std::unordered_map<std::string, std::string> diffuseMaps;
+    std::string materialName;
 
-    for (unsigned int i = 0; i < node->mNumChildren; i++)
-    {
-        processNode(node->mChildren[i], scene);
-    }
-}
-
-ModelMesh Model::processMesh(aiMesh* mesh, const aiScene* scene)
-{
-    // data to fill
+    // Per-mesh accumulators. OBJ indexes position/uv/normal separately, so each distinct
+    // combination becomes one GL vertex and `emitted` maps it back to its index.
     std::vector<MeshVertex> vertices;
     std::vector<unsigned int> indices;
-    std::vector<MeshTexture> textures;
+    std::map<std::array<int, 3>, unsigned int> emitted;
 
-    // walk through each of the mesh's vertices
-    for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-    {
-        MeshVertex vertex;
-        glm::vec3 vector;
-        // we declare a placeholder vector since assimp uses its own vector class that doesn't directly convert to glm's vec3 class so we transfer the data to this placeholder glm::vec3 first.
-        // positions
-        vector.x = mesh->mVertices[i].x;
-        vector.y = mesh->mVertices[i].y;
-        vector.z = mesh->mVertices[i].z;
-        vertex.Position = vector;
-        // normals
-        if (mesh->HasNormals())
-        {
-            vector.x = mesh->mNormals[i].x;
-            vector.y = mesh->mNormals[i].y;
-            vector.z = mesh->mNormals[i].z;
-            vertex.Normal = vector;
+    auto flushMesh = [&]() {
+        if (indices.empty()) {
+            return;
         }
-        // texture coordinates
-        if (mesh->mTextureCoords[0]) // does the mesh contain texture coordinates?
-        {
-            glm::vec2 vec;
-            // a vertex can contain up to 8 different texture coordinates. We thus make the assumption that we won't
-            // use models where a vertex can have multiple texture coordinates so we always take the first set (0).
-            vec.x = mesh->mTextureCoords[0][i].x;
-            vec.y = mesh->mTextureCoords[0][i].y;
-            vertex.TexCoords = vec;
-            // tangent
-            vector.x = mesh->mTangents[i].x;
-            vector.y = mesh->mTangents[i].y;
-            vector.z = mesh->mTangents[i].z;
-            vertex.Tangent = vector;
-            // bitangent
-            vector.x = mesh->mBitangents[i].x;
-            vector.y = mesh->mBitangents[i].y;
-            vector.z = mesh->mBitangents[i].z;
-            vertex.Bitangent = vector;
+
+        std::vector<MeshTexture> textures;
+        const auto diffuse = diffuseMaps.find(materialName);
+        if (diffuse != diffuseMaps.end()) {
+            textures = loadDiffuseTexture(diffuse->second);
         }
-        else
-            vertex.TexCoords = glm::vec2(0.0f, 0.0f);
 
-        vertices.push_back(vertex);
+        meshes.emplace_back(vertices, indices, textures);
+        vertices.clear();
+        indices.clear();
+        emitted.clear();
+    };
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream in(line);
+        std::string keyword;
+        in >> keyword;
+
+        if (keyword == "v") {
+            glm::vec3 position{};
+            in >> position.x >> position.y >> position.z;
+            positions.push_back(position);
+        } else if (keyword == "vt") {
+            glm::vec2 uv{};
+            in >> uv.x >> uv.y;
+            // Assimp was importing with aiProcess_FlipUVs and the texture is authored for
+            // that orientation, so the flip has to be reproduced here.
+            uv.y = 1.0f - uv.y;
+            uvs.push_back(uv);
+        } else if (keyword == "vn") {
+            glm::vec3 normal{};
+            in >> normal.x >> normal.y >> normal.z;
+            normals.push_back(normal);
+        } else if (keyword == "f") {
+            std::vector<unsigned int> corners;
+
+            std::string token;
+            while (in >> token) {
+                const Corner corner = parseCorner(token, positions.size(), uvs.size(), normals.size());
+                const std::array<int, 3> key{ corner.v, corner.vt, corner.vn };
+
+                const auto [entry, inserted] =
+                    emitted.try_emplace(key, static_cast<unsigned int>(vertices.size()));
+                if (inserted) {
+                    MeshVertex vertex{};
+                    if (corner.v >= 0 && corner.v < static_cast<int>(positions.size())) {
+                        vertex.Position = positions[corner.v];
+                    }
+                    if (corner.vn >= 0 && corner.vn < static_cast<int>(normals.size())) {
+                        vertex.Normal = normals[corner.vn];
+                    }
+                    if (corner.vt >= 0 && corner.vt < static_cast<int>(uvs.size())) {
+                        vertex.TexCoords = uvs[corner.vt];
+                    }
+                    vertices.push_back(vertex);
+                }
+
+                corners.push_back(entry->second);
+            }
+
+            // Fan triangulation, matching what aiProcess_Triangulate did to these quads.
+            for (std::size_t i = 1; i + 1 < corners.size(); ++i) {
+                indices.push_back(corners[0]);
+                indices.push_back(corners[i]);
+                indices.push_back(corners[i + 1]);
+            }
+        } else if (keyword == "o") {
+            // Assimp produced one mesh per object and the TODO about tracking the head
+            // separately wants that split kept, so groups stay as distinct meshes.
+            flushMesh();
+        } else if (keyword == "usemtl") {
+            in >> materialName;
+        } else if (keyword == "mtllib") {
+            std::string library;
+            in >> library;
+            diffuseMaps = parseMaterialLibrary(directory + '/' + library);
+        }
     }
-    // now wak through each of the mesh's faces (a face is a mesh its triangle) and retrieve the corresponding vertex indices.
-    for (unsigned int i = 0; i < mesh->mNumFaces; i++)
-    {
-        aiFace face = mesh->mFaces[i];
-        // retrieve all indices of the face and store them in the indices vector
-        for (unsigned int j = 0; j < face.mNumIndices; j++)
-            indices.push_back(face.mIndices[j]);
-    }
-    // process materials
-    aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
-    // we assume a convention for sampler names in the shaders. Each diffuse texture should be named
-    // as 'texture_diffuseN' where N is a sequential number ranging from 1 to MAX_SAMPLER_NUMBER.
-    // Same applies to other texture as the following list summarizes:
-    // diffuse: texture_diffuseN
-    // specular: texture_specularN
-    // normal: texture_normalN
 
-    // 1. diffuse maps
-    std::vector<MeshTexture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
-    textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
-    // 2. specular maps
-    std::vector<MeshTexture> specularMaps = loadMaterialTextures(material, aiTextureType_SPECULAR, "texture_specular");
-    textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
-    // 3. normal maps
-    std::vector<MeshTexture> normalMaps = loadMaterialTextures(material, aiTextureType_HEIGHT, "texture_normal");
-    textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
-    // 4. height maps
-    std::vector<MeshTexture> heightMaps = loadMaterialTextures(material, aiTextureType_AMBIENT, "texture_height");
-    textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
-
-    // return a mesh object created from the extracted mesh data
-    return ModelMesh(vertices, indices, textures);
+    flushMesh();
 }
 
-std::vector<MeshTexture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName)
+std::vector<MeshTexture> Model::loadDiffuseTexture(const std::string& file)
 {
-    std::vector<MeshTexture> textures;
-    for(unsigned int i = 0; i < mat->GetTextureCount(type); i++)
-    {
-        aiString str;
-        mat->GetTexture(type, i, &str);
-        // check if texture was loaded before and if so, continue to next iteration: skip loading a new texture
-        bool skip = false;
-        for(unsigned int j = 0; j < textures_loaded.size(); j++)
-        {
-            if(std::strcmp(textures_loaded[j].path.data(), str.C_Str()) == 0)
-            {
-                textures.push_back(textures_loaded[j]);
-                skip = true; // a texture with the same filepath has already been loaded, continue to next one. (optimization)
-                break;
-            }
-        }
-        if(!skip)
-        {   // if texture hasn't been loaded already, load it
-            MeshTexture texture;
-            texture.id = TextureFromFile(str.C_Str(), this->directory);
-            texture.type = typeName;
-            texture.path = str.C_Str();
-            textures.push_back(texture);
-            textures_loaded.push_back(texture);  // store it as texture loaded for entire model, to ensure we won't unnecessary load duplicate textures.
+    for (const MeshTexture& loaded : textures_loaded) {
+        if (loaded.path == file) {
+            return { loaded };
         }
     }
-    return textures;
+
+    MeshTexture texture;
+    texture.id = TextureFromFile(file.c_str(), directory);
+    texture.type = "texture_diffuse";
+    texture.path = file;
+    textures_loaded.push_back(texture);
+
+    return { texture };
 }

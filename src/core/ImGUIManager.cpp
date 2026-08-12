@@ -69,12 +69,11 @@ void ImGUIManager::drawImGUIElements(float deltaTime)
         world.setRenderDistance(renderDistance);
     }
 
+#ifndef __EMSCRIPTEN__
+    // WebGL2 has no glPolygonMode, so the toggle is desktop-only
     ImGui::Checkbox("Wireframe", &wireframe);
-    if (wireframe) {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    } else {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
+    glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
+#endif
 
     ImGui::End();
     ImGui::Render();

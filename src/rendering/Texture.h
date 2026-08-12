@@ -5,7 +5,7 @@
 #ifndef GLFWVOXEL_TEXTURE_H
 #define GLFWVOXEL_TEXTURE_H
 
-#include <glad/glad.h>
+#include "src/core/GL.h"
 #include <string>
 
 #include "glm/vec2.hpp"
@@ -21,7 +21,10 @@ public:
         Repeat = GL_REPEAT,
         MirroredRepeat = GL_MIRRORED_REPEAT,
         ClampToEdge = GL_CLAMP_TO_EDGE,
+#ifndef __EMSCRIPTEN__
+        // No GLES 3.0 equivalent
         ClampToBorder = GL_CLAMP_TO_BORDER
+#endif
     };
 
     enum class FilterMode {

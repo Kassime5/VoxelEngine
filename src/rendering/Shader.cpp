@@ -2,6 +2,32 @@
 
 #include "glm/gtc/type_ptr.inl"
 
+namespace {
+#ifdef __EMSCRIPTEN__
+    // GLSL ES declares no default precision for float in the fragment stage, so it has to be stated
+    constexpr const char* VERSION_HEADER =
+        "#version 300 es\n"
+        "precision highp float; precision highp int; "
+        "precision highp sampler2D; precision highp samplerCube;\n";
+#else
+    constexpr const char* VERSION_HEADER = "#version 460 core\n";
+#endif
+
+    std::string applyVersionHeader(std::string source) {
+        if (source.starts_with("\xEF\xBB\xBF")) {
+            source.erase(0, 3);
+        }
+
+        const std::size_t start = source.find_first_not_of(" \t\r\n");
+        if (start != std::string::npos && source.compare(start, 8, "#version") == 0) {
+            const std::size_t lineEnd = source.find('\n', start);
+            source.erase(0, lineEnd == std::string::npos ? source.size() : lineEnd + 1);
+        }
+
+        return VERSION_HEADER + source;
+    }
+}
+
 Shader::Shader(std::string name, const std::string& vertexPath, const std::string& fragmentPath) {
     // 1. retrieve the vertex/fragment source code from filePath
     std::string vertexCode;
@@ -28,6 +54,9 @@ Shader::Shader(std::string name, const std::string& vertexPath, const std::strin
     } catch (std::ifstream::failure &e) {
         std::cout << "ERROR::SHADER::FILE_NOT_SUCCESSFULLY_READ: " << e.what() << std::endl;
     }
+    vertexCode = applyVersionHeader(std::move(vertexCode));
+    fragmentCode = applyVersionHeader(std::move(fragmentCode));
+
     const char *vShaderCode = vertexCode.c_str();
     const char *fShaderCode = fragmentCode.c_str();
     // 2. compile shaders

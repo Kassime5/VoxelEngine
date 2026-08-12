@@ -14,6 +14,13 @@ Player::Player(const glm::vec3& startPosition)
 }
 
 void Player::update(float deltaTime, World& world) {
+    // Hold still until there is ground to stand on
+    if (!flying && !world.hasTerrainAt(static_cast<int>(std::floor(position.x)),
+                                       static_cast<int>(std::floor(position.z)))) {
+        velocity.y = 0.0f;
+        return;
+    }
+
     if (!flying) {
         applyGravity(deltaTime);
     }
