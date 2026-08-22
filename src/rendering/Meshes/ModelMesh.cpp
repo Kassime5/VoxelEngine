@@ -3,6 +3,7 @@
 //
 
 #include "ModelMesh.h"
+#include "src/core/GL.h"
 
 ModelMesh::ModelMesh(const std::vector<MeshVertex>& vertices, const std::vector<unsigned int>& indices, const std::vector<MeshTexture>& textures)
 {

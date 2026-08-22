@@ -3,6 +3,7 @@
 //
 
 #include "EntityMesh.h"
+#include "src/core/GL.h"
 
 EntityMesh::EntityMesh() : VAO(0), VBO(0), EBO(0), vertexCount(0), indexCount(0), initialized(false) {}
 

@@ -7,7 +7,13 @@
 #include "src/core/GL.h"
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <iostream>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <cstdio>
+#endif
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -27,10 +33,18 @@
 #include "src/input/PlayerController.h"
 #include "src/rendering/ChunkRenderer.h"
 #include "src/rendering/Skybox.h"
+#include "src/rendering/SkyBodyRenderer.h"
 #include "src/world/World.h"
 
 namespace {
-    constexpr float NEAR_PLANE = 0.1f;
+    // Clamping max delta time for browser stuff
+    constexpr float MAX_DELTA_TIME = 0.1f;
+
+#ifdef __EMSCRIPTEN__
+    Engine* g_engine = nullptr;
+#endif
+
+    constexpr float NEAR_PLANE = 0.25f;
     constexpr float FAR_PLANE = 1000.0f;
     constexpr float REACH_DISTANCE = 5.0f;
 
@@ -48,6 +62,10 @@ Engine::~Engine() {
 }
 
 bool Engine::initialize(unsigned int width, unsigned int height, const char* title) {
+#ifdef __EMSCRIPTEN__
+    g_engine = this;
+#endif
+
     glfwInit();
 #ifdef __EMSCRIPTEN__
     // WebGL2 is GLES 3.0.
@@ -75,7 +93,7 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 
     // Sound stuff, TODO: move to a proper game manager
     ALuint ambianceBuffer = soundManager->loadSound("assets/music/MusicAmbianceMono.wav");
-    soundManager->playSound3D(ambianceBuffer, 0.0f, 55.0f, 0.0f, true, 0.3f);
+    // soundManager->playSound3D(ambianceBuffer, 0.0f, 55.0f, 0.0f, true, 0.3f); // TODO uncomment and do actual work to it
 
     glfwMakeContextCurrent(*window);
 #ifndef __EMSCRIPTEN__
@@ -103,6 +121,7 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 
     hudRenderer = std::make_unique<HUDRenderer>(framebufferWidth, framebufferHeight);
     skybox = std::make_unique<Skybox>();
+    skyBodyRenderer = std::make_unique<SkyBodyRenderer>();
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -111,7 +130,7 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
     // Renderer owns the terrain shader and atlas; World borrows the atlas for meshing,
     // so the renderer has to be constructed first and outlive the world.
     chunkRenderer = std::make_unique<ChunkRenderer>();
-    if (!chunkRenderer->loadTextureAtlas("assets/textures/atlas2.png", 8)) {
+    if (!chunkRenderer->loadTextureAtlas("assets/textures/spritesheet_tiles.png", 10)) {
         std::cerr << "Failed to load texture atlas!" << std::endl;
     }
 
@@ -121,7 +140,8 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
     playerController = std::make_unique<PlayerController>(player.get(), world.get());
 
     initImGui();
-    imGUIManager = std::make_unique<ImGUIManager>(*world, player->getCamera(), renderDistance, *player);
+    imGUIManager = std::make_unique<ImGUIManager>(*world, player->getCamera(), renderDistance,
+                                                  *player, dayCycle);
 
     highlightBox = std::make_unique<HighlightBox>();
 
@@ -132,7 +152,7 @@ void Engine::step() {
     glfwPollEvents();
 
     const float currentFrame = static_cast<float>(glfwGetTime());
-    deltaTime = currentFrame - lastFrame;
+    deltaTime = std::min(currentFrame - lastFrame, MAX_DELTA_TIME);
     lastFrame = currentFrame;
 
     RenderStats::getInstance().resetFrame();
@@ -140,7 +160,19 @@ void Engine::step() {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Capture flags from the frame ImGui drew last
+    if (imguiInitialised && showDebugUI) {
+        const ImGuiIO& io = ImGui::GetIO();
+        InputManager::getInstance().setUICapture(io.WantCaptureMouse, io.WantCaptureKeyboard);
+    } else {
+        InputManager::getInstance().setUICapture(false, false);
+    }
+
     InputManager::getInstance().update();
+
+    if (InputManager::getInstance().isActionPressed(GameAction::ToggleDebug)) {
+        showDebugUI = !showDebugUI;
+    }
     player->update(deltaTime, *world);
     playerController->processInput(deltaTime);
     world->update(player->getPosition());
@@ -148,6 +180,7 @@ void Engine::step() {
     EntityManager* entityManager = world->getEntityManager();
     entityManager->update(deltaTime, world.get());
     soundManager->update();
+    dayCycle.update(deltaTime);
 
     // Built from the live framebuffer size, not the requested window size: the two
     // diverge on resize, and on the web the canvas is whatever the page gives us.
@@ -158,7 +191,9 @@ void Engine::step() {
         aspect, NEAR_PLANE, FAR_PLANE);
     const glm::mat4 view = player->getCamera().GetViewMatrix();
 
-    chunkRenderer->render(*world, projection, view);
+    const SunState sun = dayCycle.getSun();
+
+    chunkRenderer->render(*world, projection, view, sun);
     entityManager->render(projection, view);
     entityManager->renderDebug(projection, view);
 
@@ -169,11 +204,28 @@ void Engine::step() {
     }
 
     skybox->draw(view, projection);
+    // After the skybox: both sit against the far plane, so the later draw is the visible one.
+    skyBodyRenderer->draw(view, projection, sun);
+
     hudRenderer->drawCrosshair();
 
-    imGUIManager->drawImGUIElements(deltaTime);
+    if (showDebugUI) {
+        imGUIManager->drawImGUIElements(deltaTime);
+    }
+
+#ifdef __EMSCRIPTEN__
+    publishWebStats();
+#endif
+
     glfwSwapBuffers(*window);
     InputManager::getInstance().endFrame();
+}
+
+void Engine::setRenderDistance(int distance) {
+    renderDistance = std::clamp(distance, 2, 32);
+    if (world) {
+        world->setRenderDistance(renderDistance);
+    }
 }
 
 bool Engine::shouldClose() const {
@@ -220,3 +272,60 @@ void Engine::framebufferSizeCallback(GLFWwindow* window, int width, int height) 
         engine->onFramebufferResize(width, height);
     }
 }
+
+#ifdef __EMSCRIPTEN__
+
+void Engine::publishWebStats() {
+    constexpr float PUBLISH_INTERVAL = 0.25f;
+
+    statsPublishTimer += deltaTime;
+    if (statsPublishTimer < PUBLISH_INTERVAL) {
+        return;
+    }
+    statsPublishTimer = 0.0f;
+
+    auto& stats = RenderStats::getInstance();
+    const glm::vec3 position = player->getPosition();
+    const Biome* biome = world->getCurrentPlayerBiome(position.x, position.z);
+
+    char json[512];
+    std::snprintf(json, sizeof(json),
+        "{\"fps\":%.0f,\"frameMs\":%.2f,\"drawCalls\":%d,\"triangles\":%d,"
+        "\"chunksRendered\":%d,\"chunksLoaded\":%d,\"entities\":%d,"
+        "\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"biome\":\"%s\",\"clock\":\"%s\","
+        "\"renderDistance\":%d,\"dayLength\":%.0f,\"timeOfDay\":%.4f}",
+        deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f,
+        deltaTime * 1000.0f,
+        stats.getDrawCalls(), stats.getTriangles(),
+        stats.getChunksRendered(), world->getLoadedChunkCount(),
+        world->getEntityManager()->getEntityCount(),
+        position.x, position.y, position.z,
+        biome ? biome->getName().c_str() : "-",
+        dayCycle.getClockString().c_str(),
+        renderDistance, dayCycle.getDayLength(), dayCycle.getTimeOfDay());
+
+    EM_ASM({
+        if (window.voxelStats) {
+            window.voxelStats(UTF8ToString($0));
+        }
+    }, json);
+}
+
+// called from the page's stats panel
+extern "C" {
+
+EMSCRIPTEN_KEEPALIVE void voxel_set_render_distance(int distance) {
+    if (g_engine) g_engine->setRenderDistance(distance);
+}
+
+EMSCRIPTEN_KEEPALIVE void voxel_set_time_of_day(float fraction) {
+    if (g_engine) g_engine->getDayCycle().setTimeOfDay(fraction);
+}
+
+EMSCRIPTEN_KEEPALIVE void voxel_set_day_length(float seconds) {
+    if (g_engine) g_engine->getDayCycle().setDayLength(seconds);
+}
+
+}
+
+#endif // __EMSCRIPTEN__

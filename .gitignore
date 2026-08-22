@@ -1,3 +1,4 @@
 # Build directories
 cmake-build-*/
 build/
+assets/imported

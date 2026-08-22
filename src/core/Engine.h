@@ -5,6 +5,8 @@
 #ifndef GLFWVOXEL_ENGINE_H
 #define GLFWVOXEL_ENGINE_H
 
+#include "src/world/DayCycle.h"
+
 #include <memory>
 
 struct GLFWwindow;
@@ -16,6 +18,7 @@ class ImGUIManager;
 class Player;
 class PlayerController;
 class Skybox;
+class SkyBodyRenderer;
 class SoundManager;
 class Window;
 class World;
@@ -35,6 +38,10 @@ public:
     // Desktop entry point. Unused on the web, where the browser owns the loop.
     void run();
 
+    // driven by the browser's stats panel
+    void setRenderDistance(int distance);
+    DayCycle& getDayCycle() { return dayCycle; }
+
 private:
     int framebufferWidth = 0;
     int framebufferHeight = 0;
@@ -50,12 +57,24 @@ private:
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
 
+#ifdef __EMSCRIPTEN__
+    // the browser build has the DOM panel, so ImGui starts hidden
+    bool showDebugUI = false;
+    float statsPublishTimer = 0.0f;
+#else
+    bool showDebugUI = true;
+#endif
+
+
+    DayCycle dayCycle{120.0f};
+
     // Declaration order is construction order, and members are destroyed in reverse
     std::unique_ptr<Player> player;
     std::unique_ptr<Window> window;
     std::unique_ptr<SoundManager> soundManager;
     std::unique_ptr<HUDRenderer> hudRenderer;
     std::unique_ptr<Skybox> skybox;
+    std::unique_ptr<SkyBodyRenderer> skyBodyRenderer;
     std::unique_ptr<ChunkRenderer> chunkRenderer;
     std::unique_ptr<World> world;
     std::unique_ptr<PlayerController> playerController;
@@ -65,6 +84,10 @@ private:
     void initImGui();
     void shutdownImGui();
     void onFramebufferResize(int width, int height);
+
+#ifdef __EMSCRIPTEN__
+    void publishWebStats();
+#endif
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 };

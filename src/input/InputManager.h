@@ -128,6 +128,12 @@ public:
     void toggleCursor();
     void resetMouseDelta();
 
+    // Mirrors a pointer-lock change the browser made on its own
+    void onPointerLockChanged(bool locked);
+
+    // prevents clicks on UI from doing actions behind
+    void setUICapture(bool mouse, bool keyboard);
+
     void onKeyCallback(int key, int scancode, int action, int mods);
     void onMouseButtonCallback(int button, int action, int mods);
     void onCursorPosCallback(double xpos, double ypos);
@@ -153,6 +159,8 @@ private:
     float scrollDelta;
     bool firstMouse;
     bool cursorVisible;
+    bool uiCapturesMouse;
+    bool uiCapturesKeyboard;
 
     struct ActionBinding {
         InputBinding binding;

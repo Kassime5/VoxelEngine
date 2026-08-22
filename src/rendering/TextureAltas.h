@@ -1,4 +1,4 @@
-﻿//
+//
 // Created by maxim on 04/01/2026.
 //
 
@@ -6,10 +6,8 @@
 #ifndef GLFWVOXEL_TEXTUREATLAS_H
 #define GLFWVOXEL_TEXTUREATLAS_H
 
-#include "Texture.h"
 #include "../world/Block.h"
-#include <glm/glm.hpp>
-#include <array>
+#include <cstdint>
 
 enum class BlockFace {
     Front = 0,
@@ -28,23 +26,24 @@ struct BlockTexture {
 
 class TextureAtlas {
 public:
-    TextureAtlas();
-    ~TextureAtlas() = default;
+    TextureAtlas() = default;
+    ~TextureAtlas();
 
-    bool load(const char* atlasPath, int tilesPerRow = 16);
+    TextureAtlas(const TextureAtlas&) = delete;
+    TextureAtlas& operator=(const TextureAtlas&) = delete;
+
+    bool load(const char* atlasPath, int _tilesPerRow = 16);
     void bind(unsigned int slot = 0) const;
 
-    // Get UV coordinates for a specific block face
-    std::array<glm::vec2, 4> getBlockFaceUVs(BlockType block, BlockFace face) const;
-
-    bool isLoaded() const { return atlas.isValid(); }
-    int getTilesPerRow() const { return tilesPerRow; }
+    bool isLoaded() const { return textureId != 0; }
 
     uint8_t getBlockFaceTileIndex(BlockType block, BlockFace face) const;
+
 private:
-    Texture atlas;
-    int tilesPerRow;
-    std::array<glm::vec2, 4> getTileUVs(int tileX, int tileY) const;
+    unsigned int textureId = 0;
+    int tilesPerRow = 8;
+
+    void cleanup();
 
     // Block texture definitions
     BlockTexture getBlockTexture(BlockType block) const;

@@ -119,7 +119,15 @@ if(EMSCRIPTEN)
             # Baked into a .data bundle. The runtime CWD is /, so the engine's relative
             # "assets/..." paths resolve unchanged.
             "--preload-file" "${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
+
+            # Replaces Emscripten's default page. Pointer lock and audio both need a real
+            # user gesture, so the shell's click-to-play overlay is load-bearing, not decor.
+            "--shell-file" "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
     )
+
+    # Otherwise editing the shell does not relink.
+    set_property(TARGET GLFWVoxel APPEND PROPERTY LINK_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
 else()
     target_link_libraries(GLFWVoxel PRIVATE glfw glad openal)
 

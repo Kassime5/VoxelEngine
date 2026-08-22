@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GLFW Voxel Engine — Maxime Chidoyan</title>
+<style>
+	:root {
+		--bg: #0f1115;
+		--panel: rgba(16, 19, 26, 0.94);
+		--accent: rgb(121, 158, 228);
+		--text: #e6e8ec;
+		--muted: #8b93a3;
+	}
+
+	* { box-sizing: border-box; }
+
+	html, body {
+		margin: 0;
+		height: 100%;
+		background: var(--bg);
+		color: var(--text);
+		font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		overflow: hidden;
+	}
+
+	#canvas {
+		display: block;
+		width: 100%;
+		height: 100%;
+		/* The backing store is a fixed 1920x1080 set by the engine; this scales it to the
+		   viewport without distorting the aspect ratio. */
+		object-fit: contain;
+		background: var(--bg);
+		outline: none;
+	}
+
+	#back {
+		position: fixed;
+		top: 1rem;
+		left: 1.25rem;
+		z-index: 30;
+		color: var(--muted);
+		text-decoration: none;
+		font-size: 0.9rem;
+		transition: color 0.15s;
+	}
+	#back:hover { color: var(--accent); }
+
+	#overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 20;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--panel);
+		backdrop-filter: blur(3px);
+		transition: opacity 0.25s ease;
+	}
+	#overlay.hidden { opacity: 0; pointer-events: none; }
+
+	.panel {
+		width: min(30rem, calc(100% - 3rem));
+		text-align: center;
+	}
+
+	.panel h1 {
+		margin: 0 0 0.4rem;
+		font-size: 1.6rem;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+
+	.panel .sub {
+		margin: 0 0 2rem;
+		color: var(--muted);
+		font-size: 0.92rem;
+		line-height: 1.5;
+	}
+
+	.controls {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.5rem 1.25rem;
+		margin: 0 0 2rem;
+		text-align: left;
+		font-size: 0.88rem;
+	}
+	.controls dt {
+		color: var(--accent);
+		font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+		white-space: nowrap;
+	}
+	.controls dd { margin: 0; color: var(--muted); }
+
+	#play {
+		appearance: none;
+		border: solid 1px var(--accent);
+		background: transparent;
+		color: var(--accent);
+		font: inherit;
+		font-size: 0.95rem;
+		padding: 0.7rem 2.4rem;
+		border-radius: 2em;
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+	#play:hover:not(:disabled) { background: var(--accent); color: #0f1115; }
+	#play:disabled { opacity: 0.35; cursor: default; border-color: var(--muted); color: var(--muted); }
+
+	#progress {
+		width: 100%;
+		height: 2px;
+		margin-top: 1.6rem;
+		background: rgba(255, 255, 255, 0.08);
+		overflow: hidden;
+	}
+	#bar {
+		height: 100%;
+		width: 0;
+		background: var(--accent);
+		transition: width 0.2s ease;
+	}
+	#status {
+		margin-top: 0.7rem;
+		min-height: 1.2em;
+		font-size: 0.8rem;
+		color: var(--muted);
+	}
+
+	#hint {
+		position: fixed;
+		bottom: 1rem;
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 10;
+		color: var(--muted);
+		font-size: 0.8rem;
+		opacity: 0;
+		transition: opacity 0.3s;
+		pointer-events: none;
+	}
+	#hint.show { opacity: 1; }
+
+	/* --- stats panel --- */
+
+	#panel {
+		position: fixed;
+		top: 1rem;
+		right: 1rem;
+		z-index: 15;
+		width: 15rem;
+		background: rgba(16, 19, 26, 0.82);
+		border: solid 1px rgba(255, 255, 255, 0.09);
+		border-radius: 0.4rem;
+		backdrop-filter: blur(6px);
+		font-size: 0.78rem;
+		transition: opacity 0.2s;
+	}
+	#panel.hidden { display: none; }
+
+	#panel header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.55rem 0.75rem;
+		color: var(--text);
+		font-weight: 600;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+		font-size: 0.7rem;
+	}
+
+	#panel-collapse {
+		appearance: none;
+		background: none;
+		border: 0;
+		color: var(--muted);
+		font: inherit;
+		font-size: 1rem;
+		line-height: 1;
+		cursor: pointer;
+		padding: 0 0.2rem;
+	}
+	#panel-collapse:hover { color: var(--accent); }
+
+	#panel-body {
+		padding: 0 0.75rem 0.75rem;
+		border-top: solid 1px rgba(255, 255, 255, 0.07);
+	}
+	#panel.collapsed #panel-body { display: none; }
+
+	.stats {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 0.28rem 0.75rem;
+		margin: 0.7rem 0 0;
+	}
+	.stats dt { color: var(--muted); }
+	.stats dd {
+		margin: 0;
+		text-align: right;
+		color: var(--text);
+		font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.sliders {
+		margin-top: 0.9rem;
+		padding-top: 0.75rem;
+		border-top: solid 1px rgba(255, 255, 255, 0.07);
+	}
+	.sliders label {
+		display: block;
+		margin-bottom: 0.6rem;
+		color: var(--muted);
+	}
+	.sliders label .val { float: right; color: var(--text); font-variant-numeric: tabular-nums; }
+	.sliders input[type="range"] {
+		width: 100%;
+		margin-top: 0.3rem;
+		accent-color: var(--accent);
+	}
+
+	/* While the pointer is locked every mouse event belongs to the canvas, so the sliders
+	   genuinely cannot be operated. Say so rather than letting them look broken. */
+	#panel.locked .sliders { opacity: 0.35; pointer-events: none; }
+	#lock-note {
+		margin: 0.6rem 0 0;
+		color: var(--muted);
+		font-size: 0.72rem;
+		font-style: italic;
+		display: none;
+	}
+	#panel.locked #lock-note { display: block; }
+</style>
+</head>
+<body>
+
+<a id="back" href="../">&larr; <span data-i18n="back"></span></a>
+
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+
+<div id="overlay">
+	<div class="panel">
+		<h1>GLFW Voxel Engine</h1>
+		<p class="sub" data-i18n="sub"></p>
+
+		<dl class="controls">
+			<dt>W A S D</dt><dd data-i18n="move"></dd>
+			<dt data-i18n="mouseKey"></dt><dd data-i18n="look"></dd>
+			<dt data-i18n="lmbKey"></dt><dd data-i18n="breakPlace"></dd>
+			<dt data-i18n="spaceKey"></dt><dd data-i18n="jump"></dd>
+			<dt data-i18n="shiftKey"></dt><dd data-i18n="sprint"></dd>
+			<dt>F</dt><dd data-i18n="fly"></dd>
+			<dt>Esc</dt><dd data-i18n="release"></dd>
+		</dl>
+
+		<button id="play" disabled data-i18n="loading"></button>
+
+		<div id="progress"><div id="bar"></div></div>
+		<div id="status"></div>
+	</div>
+</div>
+
+<div id="hint" data-i18n="hint"></div>
+
+<aside id="panel" class="hidden">
+	<header>
+		<span data-i18n="panelTitle"></span>
+		<button id="panel-collapse" type="button" aria-label="Toggle panel">&minus;</button>
+	</header>
+	<div id="panel-body">
+		<dl class="stats">
+			<dt>FPS</dt><dd id="s-fps">&ndash;</dd>
+			<dt data-i18n="lTriangles"></dt><dd id="s-tris">&ndash;</dd>
+			<dt data-i18n="lDrawCalls"></dt><dd id="s-draws">&ndash;</dd>
+			<dt data-i18n="lChunks"></dt><dd id="s-chunks">&ndash;</dd>
+			<dt data-i18n="lEntities"></dt><dd id="s-entities">&ndash;</dd>
+			<dt data-i18n="lBiome"></dt><dd id="s-biome">&ndash;</dd>
+			<dt data-i18n="lTime"></dt><dd id="s-clock">&ndash;</dd>
+			<dt data-i18n="lPosition"></dt><dd id="s-pos">&ndash;</dd>
+		</dl>
+
+		<div class="sliders">
+			<label>
+				<span class="val" id="v-rd"></span><span data-i18n="lRenderDistance"></span>
+				<input type="range" id="c-rd" min="2" max="16" step="1" value="4"/>
+			</label>
+			<label>
+				<span class="val" id="v-tod"></span><span data-i18n="lTimeOfDay"></span>
+				<input type="range" id="c-tod" min="0" max="1" step="0.005" value="0.3"/>
+			</label>
+			<label>
+				<span class="val" id="v-day"></span><span data-i18n="lDayLength"></span>
+				<input type="range" id="c-day" min="10" max="600" step="10" value="120"/>
+			</label>
+		</div>
+
+		<p id="lock-note" data-i18n="lockNote"></p>
+	</div>
+</aside>
+
+<script>
+(function () {
+	var strings = {
+		en: {
+			back: "Portfolio",
+			sub: "A voxel engine written from scratch in C++ and OpenGL, compiled to WebAssembly. Terrain is generated and meshed in the browser.",
+			move: "Move", look: "Look around", breakPlace: "Break / place block",
+			jump: "Jump (ascend while flying)", sprint: "Sprint", fly: "Toggle flight",
+			release: "Release the mouse",
+			mouseKey: "Mouse", lmbKey: "LMB / RMB", spaceKey: "Space", shiftKey: "Shift",
+			loading: "Loading…", play: "Click to play",
+			hint: "Click the view to capture the mouse again",
+			failed: "Failed to load. Try reloading the page.",
+			panelTitle: "Engine", lTriangles: "Triangles", lDrawCalls: "Draw calls",
+			lChunks: "Chunks", lEntities: "Entities", lBiome: "Biome", lTime: "Time",
+			lPosition: "Position", lRenderDistance: "Render distance",
+			lTimeOfDay: "Time of day", lDayLength: "Day length",
+			lockNote: "Press Esc to adjust these"
+		},
+		fr: {
+			back: "Portfolio",
+			sub: "Un moteur voxel écrit de zéro en C++ et OpenGL, compilé en WebAssembly. Le terrain est généré et maillé dans le navigateur.",
+			move: "Se déplacer", look: "Regarder", breakPlace: "Casser / poser un bloc",
+			jump: "Sauter (monter en vol)", sprint: "Courir", fly: "Activer le vol",
+			release: "Libérer la souris",
+			mouseKey: "Souris", lmbKey: "Clic G / D", spaceKey: "Espace", shiftKey: "Maj",
+			loading: "Chargement…", play: "Cliquer pour jouer",
+			hint: "Cliquez sur la vue pour recapturer la souris",
+			failed: "Échec du chargement. Rechargez la page.",
+			panelTitle: "Moteur", lTriangles: "Triangles", lDrawCalls: "Draw calls",
+			lChunks: "Chunks", lEntities: "Entités", lBiome: "Biome", lTime: "Heure",
+			lPosition: "Position", lRenderDistance: "Distance d'affichage",
+			lTimeOfDay: "Heure du jour", lDayLength: "Durée du jour",
+			lockNote: "Appuyez sur Échap pour les régler"
+		}
+	};
+
+	var lang = (navigator.language || "en").toLowerCase().indexOf("fr") === 0 ? "fr" : "en";
+	var t = strings[lang];
+	document.documentElement.lang = lang;
+	document.querySelectorAll("[data-i18n]").forEach(function (el) {
+		var key = el.getAttribute("data-i18n");
+		if (t[key]) el.textContent = t[key];
+	});
+
+	var canvas = document.getElementById("canvas");
+	var overlay = document.getElementById("overlay");
+	var playBtn = document.getElementById("play");
+	var bar = document.getElementById("bar");
+	var statusEl = document.getElementById("status");
+	var hint = document.getElementById("hint");
+	var panel = document.getElementById("panel");
+
+	var ready = false;
+
+	// --- stats panel ---------------------------------------------------------------
+
+	var field = {};
+	["fps", "tris", "draws", "chunks", "entities", "biome", "clock", "pos"].forEach(function (k) {
+		field[k] = document.getElementById("s-" + k);
+	});
+
+	var slider = {
+		rd: document.getElementById("c-rd"),
+		tod: document.getElementById("c-tod"),
+		day: document.getElementById("c-day")
+	};
+	var value = {
+		rd: document.getElementById("v-rd"),
+		tod: document.getElementById("v-tod"),
+		day: document.getElementById("v-day")
+	};
+
+	// Which slider the user currently has hold of, so incoming stats do not yank it.
+	var dragging = null;
+	Object.keys(slider).forEach(function (k) {
+		slider[k].addEventListener("pointerdown", function () { dragging = k; });
+	});
+	window.addEventListener("pointerup", function () { dragging = null; });
+
+	function callEngine(name, arg) {
+		if (window.Module && typeof Module[name] === "function") Module[name](arg);
+	}
+
+	slider.rd.addEventListener("input", function () {
+		value.rd.textContent = slider.rd.value;
+		callEngine("_voxel_set_render_distance", parseInt(slider.rd.value, 10));
+	});
+	slider.tod.addEventListener("input", function () {
+		callEngine("_voxel_set_time_of_day", parseFloat(slider.tod.value));
+	});
+	slider.day.addEventListener("input", function () {
+		value.day.textContent = slider.day.value + "s";
+		callEngine("_voxel_set_day_length", parseFloat(slider.day.value));
+	});
+
+	document.getElementById("panel-collapse").addEventListener("click", function () {
+		var collapsed = panel.classList.toggle("collapsed");
+		this.textContent = collapsed ? "+" : "−";
+	});
+
+	var locale = lang === "fr" ? "fr-FR" : "en-US";
+	var syncedOnce = false;
+
+	// Called from Engine::publishWebStats
+	window.voxelStats = function (json) {
+		var s;
+		try { s = JSON.parse(json); } catch (e) { return; }
+
+		field.fps.textContent = s.fps + "  (" + s.frameMs.toFixed(1) + " ms)";
+		field.tris.textContent = s.triangles.toLocaleString(locale);
+		field.draws.textContent = s.drawCalls.toLocaleString(locale);
+		field.chunks.textContent = s.chunksRendered + " / " + s.chunksLoaded;
+		field.entities.textContent = s.entities;
+		field.biome.textContent = s.biome;
+		field.clock.textContent = s.clock;
+		field.pos.textContent = Math.round(s.x) + ", " + Math.round(s.y) + ", " + Math.round(s.z);
+
+		if (dragging !== "tod") slider.tod.value = s.timeOfDay;
+		value.tod.textContent = s.clock;
+
+		if (!syncedOnce) {
+			syncedOnce = true;
+			slider.rd.value = s.renderDistance;
+			slider.day.value = s.dayLength;
+			value.rd.textContent = s.renderDistance;
+			value.day.textContent = s.dayLength + "s";
+		}
+	};
+
+	function setReady() {
+		if (ready) return;
+		ready = true;
+		bar.style.width = "100%";
+		statusEl.textContent = "";
+		playBtn.disabled = false;
+		playBtn.textContent = t.play;
+	}
+
+	// Pointer lock and audio both need a real user gesture, which is the whole reason this
+	// overlay exists rather than the demo starting on its own.
+	function start() {
+		if (!ready) return;
+		overlay.classList.add("hidden");
+		panel.classList.remove("hidden");
+		canvas.focus();
+		if (canvas.requestPointerLock) canvas.requestPointerLock();
+	}
+
+	playBtn.addEventListener("click", start);
+
+	// Escape drops pointer lock; clicking the view takes it back.
+	canvas.addEventListener("click", function () {
+		if (ready && !document.pointerLockElement && canvas.requestPointerLock) {
+			canvas.requestPointerLock();
+		}
+	});
+
+	document.addEventListener("pointerlockchange", function () {
+		if (!ready) return;
+		var locked = document.pointerLockElement === canvas;
+		hint.classList.toggle("show", !locked);
+		// Under pointer lock every mouse event is routed to the canvas, so the sliders are
+		// genuinely unreachable. Dim them and say why instead of leaving them looking dead.
+		panel.classList.toggle("locked", locked);
+	});
+
+	// Space and the arrow keys scroll the page by default, which fights the controls.
+	window.addEventListener("keydown", function (e) {
+		if (document.pointerLockElement === canvas &&
+			[" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(e.key) !== -1) {
+			e.preventDefault();
+		}
+	}, false);
+
+	window.Module = {
+		canvas: canvas,
+		print: function (text) { console.log(text); },
+		printErr: function (text) { console.error(text); },
+
+		// Emscripten reports asset download progress through setStatus as "(loaded/total)".
+		setStatus: function (text) {
+			// Emscripten keeps reporting "Running..." after startup; once the overlay is
+			// live there is nothing left worth showing.
+			if (ready) return;
+			if (!text) { setReady(); return; }
+			var match = /([^(]+)\((\d+(?:\.\d+)?)\/(\d+)\)/.exec(text);
+			if (match) {
+				var pct = (parseFloat(match[2]) / parseFloat(match[3])) * 100;
+				bar.style.width = pct.toFixed(1) + "%";
+				statusEl.textContent = match[1].trim();
+			} else {
+				statusEl.textContent = text;
+			}
+		},
+
+		totalDependencies: 0,
+		monitorRunDependencies: function (left) {
+			this.totalDependencies = Math.max(this.totalDependencies, left);
+			if (left === 0) setReady();
+		},
+
+		onAbort: function () {
+			statusEl.textContent = t.failed;
+			bar.style.background = "#c05a5a";
+		}
+	};
+
+	window.addEventListener("error", function () {
+		if (!ready) Module.onAbort();
+	});
+}());
+</script>
+
+{{{ SCRIPT }}}
+
+</body>
+</html>

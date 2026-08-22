@@ -4,14 +4,31 @@
 
 #include "InputManager.h"
 
-InputManager::InputManager(): mousePosition(0.0f), lastMousePosition(0.0f), mouseDelta(0.0f), scrollDelta(0.0f),
-    firstMouse(true), cursorVisible(false), window(nullptr)
+#ifdef __EMSCRIPTEN__
+#include <emscripten/html5.h>
+
+namespace
 {
+    EM_BOOL pointerLockChanged(int, const EmscriptenPointerlockChangeEvent* event, void* userData) {
+        static_cast<InputManager*>(userData)->onPointerLockChanged(event->isActive != 0);
+        return EM_FALSE;
+    }
+}
+#endif
+
+InputManager::InputManager() : mousePosition(0.0f), lastMousePosition(0.0f), mouseDelta(0.0f), scrollDelta(0.0f),
+                               firstMouse(true), cursorVisible(false), uiCapturesMouse(false),
+                               uiCapturesKeyboard(false), window(nullptr) {
     contextStack.push_back(InputContext::Gameplay);
 }
 
 void InputManager::initialize(GLFWwindow* _window) {
     window = _window;
+
+#ifdef __EMSCRIPTEN__
+    // Pointer lock is done on the browser, without this the engine keeps believing the mouse is captured after Escape frees it.
+    emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, EM_FALSE, pointerLockChanged);
+#endif
 
     glfwSetKeyCallback(window, inputKeyCallback);
     glfwSetMouseButtonCallback(window, inputMouseButtonCallback);
@@ -30,13 +47,18 @@ void InputManager::shutdown() {
 }
 
 void InputManager::update() {
-    if (!cursorVisible) {
+    if (!cursorVisible && !uiCapturesMouse) {
         mouseDelta = mousePosition - lastMousePosition;
         mouseDelta.y = -mouseDelta.y;
-    } else {
+    }
+    else {
         mouseDelta = glm::vec2(0.0f);
     }
     lastMousePosition = mousePosition;
+
+    if (uiCapturesMouse) {
+        scrollDelta = 0.0f; // scrolling an ImGui list should not also zoom the camera
+    }
 }
 
 void InputManager::pushContext(InputContext context) {
@@ -64,15 +86,18 @@ bool InputManager::isContextActive(InputContext context) const {
     return getCurrentContext() == context;
 }
 
+// Same guard as the mouse queries: ctrl-clicking an ImGui slider turns it into a text
+// field, and WASD should type into it rather than walk the player away.
+
 bool InputManager::isKeyPressed(int key) const {
+    if (uiCapturesKeyboard) return false;
     auto it = keyStates.find(key);
     return it != keyStates.end() && it->second == InputState::JustPressed;
 }
 
 bool InputManager::isKeyHeld(int key) const {
     auto it = keyStates.find(key);
-    return it != keyStates.end() &&
-           (it->second == InputState::Held || it->second == InputState::JustPressed);
+    return it != keyStates.end() && (it->second == InputState::Held || it->second == InputState::JustPressed);
 }
 
 bool InputManager::isKeyReleased(int key) const {
@@ -86,17 +111,20 @@ InputState InputManager::getKeyState(int key) const {
 }
 
 bool InputManager::isMouseButtonPressed(int button) const {
+    if (uiCapturesMouse) return false;
     auto it = mouseButtonStates.find(button);
     return it != mouseButtonStates.end() && it->second == InputState::JustPressed;
 }
 
 bool InputManager::isMouseButtonHeld(int button) const {
+    if (uiCapturesMouse) return false;
     auto it = mouseButtonStates.find(button);
     return it != mouseButtonStates.end() &&
-           (it->second == InputState::Held || it->second == InputState::JustPressed);
+        (it->second == InputState::Held || it->second == InputState::JustPressed);
 }
 
 bool InputManager::isMouseButtonReleased(int button) const {
+    if (uiCapturesMouse) return false;
     auto it = mouseButtonStates.find(button);
     return it != mouseButtonStates.end() && it->second == InputState::JustReleased;
 }
@@ -200,6 +228,23 @@ void InputManager::toggleCursor() {
     setCursorVisible(!cursorVisible);
 }
 
+void InputManager::onPointerLockChanged(bool locked) {
+    // Only the flag is mirrored. Calling glfwSetInputMode here would ask the browser to
+    // undo what it just did; GLFW's own cursor mode is left alone, which is what lets a
+    // later click on the canvas re-acquire the lock.
+    cursorVisible = !locked;
+
+    // The virtual cursor GLFW accumulates while locked sits nowhere near the real pointer,
+    // so the first sample after a transition would otherwise be one enormous delta and
+    // whip the camera around.
+    resetMouseDelta();
+}
+
+void InputManager::setUICapture(bool mouse, bool keyboard) {
+    uiCapturesMouse = mouse;
+    uiCapturesKeyboard = keyboard;
+}
+
 void InputManager::resetMouseDelta() {
     firstMouse = true;
     mouseDelta = glm::vec2(0.0f);
@@ -229,7 +274,8 @@ void InputManager::onScrollCallback(double xoffset, double yoffset) {
 void InputManager::updateKeyState(int key, int action) {
     if (action == GLFW_PRESS) {
         keyStates[key] = InputState::JustPressed;
-    } else if (action == GLFW_RELEASE) {
+    }
+    else if (action == GLFW_RELEASE) {
         keyStates[key] = InputState::JustReleased;
     }
 }
@@ -237,7 +283,8 @@ void InputManager::updateKeyState(int key, int action) {
 void InputManager::updateMouseButtonState(int button, int action) {
     if (action == GLFW_PRESS) {
         mouseButtonStates[button] = InputState::JustPressed;
-    } else if (action == GLFW_RELEASE) {
+    }
+    else if (action == GLFW_RELEASE) {
         mouseButtonStates[button] = InputState::JustReleased;
     }
 }
@@ -246,7 +293,8 @@ void InputManager::transitionStates() {
     for (auto& pair : keyStates) {
         if (pair.second == InputState::JustPressed) {
             pair.second = InputState::Held;
-        } else if (pair.second == InputState::JustReleased) {
+        }
+        else if (pair.second == InputState::JustReleased) {
             pair.second = InputState::Released;
         }
     }
@@ -254,7 +302,8 @@ void InputManager::transitionStates() {
     for (auto& pair : mouseButtonStates) {
         if (pair.second == InputState::JustPressed) {
             pair.second = InputState::Held;
-        } else if (pair.second == InputState::JustReleased) {
+        }
+        else if (pair.second == InputState::JustReleased) {
             pair.second = InputState::Released;
         }
     }
@@ -284,7 +333,9 @@ void InputManager::setupDefaultBindings() {
     bindAction(GameAction::ToggleHitBox, InputBinding(GLFW_KEY_F3));
     bindAction(GameAction::TogglePause, InputBinding(GLFW_KEY_ESCAPE), InputContext::Any);
     bindAction(GameAction::ToggleInventory, InputBinding(GLFW_KEY_E));
-    // bindAction(GameAction::ToggleDebug, InputBinding(GLFW_KEY_F3));
+    // F1 rather than F3, which ToggleHitBox already owns. On the web build this is what
+    // brings the ImGui panel up, since the page's own stats panel is the default there.
+    bindAction(GameAction::ToggleDebug, InputBinding(GLFW_KEY_F1), InputContext::Any);
 
     // Misc
     bindAction(GameAction::Screenshot, InputBinding(GLFW_KEY_F2));
@@ -293,10 +344,14 @@ void InputManager::setupDefaultBindings() {
 
 InputState InputManager::determineInputState(InputState current, bool isPressed) const {
     if (isPressed) {
-        return current == InputState::Released || current == InputState::JustReleased ? InputState::JustPressed : InputState::Held;
+        return current == InputState::Released || current == InputState::JustReleased
+                   ? InputState::JustPressed
+                   : InputState::Held;
     }
 
-    return current == InputState::Held || current == InputState::JustPressed ? InputState::JustReleased : InputState::Released;
+    return current == InputState::Held || current == InputState::JustPressed
+               ? InputState::JustReleased
+               : InputState::Released;
 }
 
 void InputManager::endFrame() {

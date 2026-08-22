@@ -263,19 +263,17 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World 
                     blockNext = BlockType::Air;
                 }
 
-                // Check if we need to render a face here
-                bool currentOpaque = isBlockOpaque(blockCurrent);
-                bool nextOpaque = isBlockOpaque(blockNext);
+                bool drawCurrent = blockCurrent != BlockType::Air && blockCurrent != blockNext &&!isBlockOpaque(blockNext);
+                bool drawNext = blockNext != BlockType::Air && blockNext != blockCurrent &&!isBlockOpaque(blockCurrent);
 
-                if (currentOpaque == nextOpaque) {
-                    // No face needed (both solid or both air)
-                    mask[n++] = {BlockType::Air, BlockFace::Top};
-                } else if (currentOpaque) {
-                    // Render positive face (current block facing +axis direction)
+                if (drawCurrent) {
+                    // Current block facing +axis
                     mask[n++] = {blockCurrent, positiveFace};
-                } else {
-                    // Render negative face (next block facing -axis direction)
+                } else if (drawNext) {
+                    // Next block facing -axis
                     mask[n++] = {blockNext, negativeFace};
+                } else {
+                    mask[n++] = {BlockType::Air, BlockFace::Top};
                 }
             }
         }

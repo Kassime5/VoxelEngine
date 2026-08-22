@@ -24,18 +24,18 @@ bool ChunkRenderer::loadTextureAtlas(const char* atlasPath, int tilesPerRow) {
     return textureAtlas.load(atlasPath, tilesPerRow);
 }
 
-void ChunkRenderer::render(const World& world, const glm::mat4& projection, const glm::mat4& view) {
+void ChunkRenderer::render(const World& world, const glm::mat4& projection, const glm::mat4& view,
+                           const SunState& sun) {
     PROFILE_FUNCTION();
 
     cullChunks(world, projection * view);
 
     terrainShader->use();
-    terrainShader->setFloat("tilesPerRow", static_cast<float>(textureAtlas.getTilesPerRow()));
-    terrainShader->setInt("texture1", 0);
+    terrainShader->setInt("ourTexture", 0);
 
-    // TODO: Change where the lightsource is
-    terrainShader->setVec3("lightPos", glm::vec3(0.0f, 50.0f, 0.0f));
-    terrainShader->setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
+    terrainShader->setVec3("lightDir", sun.direction);
+    terrainShader->setFloat("sunIntensity", sun.intensity);
+    terrainShader->setVec3("lightColor", sun.color);
     terrainShader->setMat4("projection", projection);
     terrainShader->setMat4("view", view);
 
@@ -82,8 +82,8 @@ void ChunkRenderer::renderOpaque() const {
 void ChunkRenderer::renderTransparent() const {
     PROFILE_SCOPE("ChunkRenderer::renderTransparent");
 
+    // cross models are two-sided, so culling must be off
     glDisable(GL_CULL_FACE);
-    glDepthMask(GL_FALSE);
 
     for (const VisibleChunk& visible : visibleChunks) {
         if (visible.chunk->isTransparentMeshEmpty())
@@ -93,6 +93,5 @@ void ChunkRenderer::renderTransparent() const {
         visible.chunk->drawTransparent();
     }
 
-    glDepthMask(GL_TRUE);
     glEnable(GL_CULL_FACE);
 }

@@ -4,6 +4,7 @@
 
 
 #include "ChunkMesh.h"
+#include "src/core/GL.h"
 #include "src/debug/RenderStats.h"
 
 ChunkMesh::ChunkMesh() : VAO(0), VBO(0), EBO(0), initialized(false) {}

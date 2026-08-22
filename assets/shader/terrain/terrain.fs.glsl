@@ -5,48 +5,33 @@ in vec2 LocalUV;
 in vec3 Normal;
 in vec3 FragPos;
 flat in uint TileIndex;
+flat in float FaceShade;
 
-uniform sampler2D ourTexture;
-uniform vec3 lightPos;
+uniform sampler2DArray ourTexture;
+uniform vec3 lightDir;
 uniform vec3 lightColor;
-uniform vec3 viewPos;
-uniform float tilesPerRow;
+// 0 through the night, 1 with the sun up. Fades across the horizon.
+uniform float sunIntensity;
+
+// Floor brightness at night and at midday
+const float NIGHT_AMBIENT = 0.15;
+const float DAY_AMBIENT = 0.35;
+
+const float ALPHA_CUTOFF = 0.1;
 
 void main()
 {
-    // Normalize LocalUV to 0-1 range for a single tile
-    vec2 normalizedUV = fract(LocalUV);
+    vec4 texColor = texture(ourTexture, vec3(LocalUV, float(TileIndex)));
 
-    // Calculate tile position in atlas
-    float tileX = float(TileIndex % uint(tilesPerRow));
-    float tileY = float(TileIndex / uint(tilesPerRow));
+    if (texColor.a < ALPHA_CUTOFF)
+        discard;
 
-    // Calculate final UV within the atlas
-    float tileSize = 1.0 / tilesPerRow;
-
-    vec2 TexCoord = vec2(
-        tileX * tileSize + normalizedUV.x * tileSize,
-        tileY * tileSize + normalizedUV.y * tileSize
-    );
-
-    // ambient
-    float ambientStrength = 0.2;
-    vec3 ambient = ambientStrength * lightColor;
-
-    // diffuse
+    // Directional sun, faded by how far above the horizon it is
     vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * lightColor;
+    float diff = max(dot(norm, lightDir), 0.0) * sunIntensity;
+    float ambient = mix(NIGHT_AMBIENT, DAY_AMBIENT, sunIntensity);
+    float light = (ambient + (1.0 - ambient) * diff) * FaceShade;
 
-    // specular
-//     float specularStrength = 0.5;
-//     vec3 viewDir = normalize(viewPos - FragPos);
-//     vec3 reflectDir = reflect(-lightDir, norm);
-//     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-//     vec3 specular = specularStrength * spec * lightColor;
-
-//     vec3 result = ambient + diffuse + specular;
-    vec3 result = ambient + diffuse;
-    FragColor = texture(ourTexture, TexCoord) * vec4(result, 1.0);
+    // Opaque past the cutoff, so foliage never depends on draw order
+    FragColor = vec4(texColor.rgb * lightColor * light, 1.0);
 }

@@ -41,7 +41,7 @@ inline bool canGoThrough(BlockType type) {
 }
 
 inline bool isBlockOpaque(BlockType type) {
-    return type != BlockType::Air;
+    return type != BlockType::Air && getBlockRenderType(type) == BlockRenderType::Solid;
 }
 
 inline int printBlockType(BlockType type) {

@@ -3,6 +3,7 @@
 //
 
 #include "Model.h"
+#include "src/core/GL.h"
 
 #include <array>
 #include <fstream>

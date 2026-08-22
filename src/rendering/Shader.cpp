@@ -1,6 +1,7 @@
 ﻿#include "./Shader.h"
 
 #include "glm/gtc/type_ptr.inl"
+#include "src/core/GL.h"
 
 namespace {
 #ifdef __EMSCRIPTEN__
@@ -8,7 +9,8 @@ namespace {
     constexpr const char* VERSION_HEADER =
         "#version 300 es\n"
         "precision highp float; precision highp int; "
-        "precision highp sampler2D; precision highp samplerCube;\n";
+        "precision highp sampler2D; precision highp samplerCube; "
+        "precision highp sampler2DArray;\n";
 #else
     constexpr const char* VERSION_HEADER = "#version 460 core\n";
 #endif

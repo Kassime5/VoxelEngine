@@ -6,6 +6,7 @@
 #define GLFWVOXEL_IMGUIMANAGER_H
 #include "src/rendering/Camera.h"
 #include "src/world/World.h"
+#include "src/world/DayCycle.h"
 #include "src/debug/RenderStats.h"
 
 #include <imgui.h>
@@ -17,7 +18,8 @@
 class ImGUIManager
 {
 public:
-    ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player);
+    ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
+                 DayCycle& _dayCycle);
     ~ImGUIManager();
     void drawImGUIElements(float deltaTime);
 private:
@@ -25,6 +27,7 @@ private:
     Camera& camera;
     Player& player;
     EntityManager& entityManager;
+    DayCycle& dayCycle;
 
     bool wireframe = false;
     int& renderDistance;

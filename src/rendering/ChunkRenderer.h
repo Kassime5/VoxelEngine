@@ -10,17 +10,13 @@
 
 #include "Frustum.h"
 #include "TextureAltas.h"
+#include "src/world/DayCycle.h"
 
 class Chunk;
 class Shader;
 class World;
 
-// Owns every GPU-side resource needed to draw terrain: the terrain shader and the
-// block texture atlas. World owns voxel data and knows nothing about either.
-//
-// The atlas lives here because it holds a GL texture handle, but chunk meshing also
-// needs it for UV lookups on the worker threads -- World borrows it via
-// getTextureAtlas() and only ever reads from it.
+// owns every GPU-side resource needed to draw terrain
 class ChunkRenderer {
 public:
     ChunkRenderer();
@@ -31,10 +27,8 @@ public:
     bool loadTextureAtlas(const char* atlasPath, int tilesPerRow = 16);
     const TextureAtlas& getTextureAtlas() const { return textureAtlas; }
 
-    // Culls once, then replays the surviving chunks for the opaque and transparent
-    // passes. viewProj must be built from the same matrices used to draw, otherwise
-    // culling and rasterisation disagree.
-    void render(const World& world, const glm::mat4& projection, const glm::mat4& view);
+    // Culls once, then replays the surviving chunks for the opaque and transparent passes.
+    void render(const World& world, const glm::mat4& projection, const glm::mat4& view, const SunState& sun);
 
 private:
     struct VisibleChunk {

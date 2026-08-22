@@ -3,13 +3,16 @@
 //
 
 #include "ImGUIManager.h"
+#include "src/core/GL.h"
 
 #include "src/game/Player.h"
 
 
-ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player) :
+ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
+                           DayCycle& _dayCycle) :
     world(_world), camera(_camera),
     player(_player), entityManager(*_world.getEntityManager()),
+    dayCycle(_dayCycle),
     renderDistance(_renderDistance)
 {}
 
@@ -48,6 +51,23 @@ void ImGUIManager::drawImGUIElements(float deltaTime)
     // More world stuff
     ImGui::SeparatorText("World");
     ImGui::Text("Entity count: %d", entityManager.getEntityCount());
+
+    // Sky
+    ImGui::SeparatorText("Sky");
+    ImGui::Text("Time: %s", dayCycle.getClockString().c_str());
+    ImGui::Text("Sun intensity: %.2f", dayCycle.getSunIntensity());
+    const glm::vec3 sun = dayCycle.getSunDirection();
+    ImGui::Text("Sun dir: %.2f, %.2f, %.2f", sun.x, sun.y, sun.z);
+
+    float dayLength = dayCycle.getDayLength();
+    if (ImGui::SliderFloat("Day length (s)", &dayLength, 5.0f, 600.0f, "%.0f")) {
+        dayCycle.setDayLength(dayLength);
+    }
+
+    float timeOfDay = dayCycle.getTimeOfDay();
+    if (ImGui::SliderFloat("Time of day", &timeOfDay, 0.0f, 1.0f, "%.3f")) {
+        dayCycle.setTimeOfDay(timeOfDay);
+    }
 
     // Player stats
     ImGui::SeparatorText("Player");

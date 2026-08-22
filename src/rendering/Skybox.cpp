@@ -3,6 +3,7 @@
 //
 
 #include "Skybox.h"
+#include "src/core/GL.h"
 #include "../stb_image.h"
 #include <iostream>
 
@@ -55,12 +56,12 @@ static const float skyboxVertices[] = {
 
 Skybox::Skybox() : VAO(0), VBO(0), textureID(0) {
     std::vector<std::string> faces = {
-        "assets/textures/skybox/right.png",
-        "assets/textures/skybox/left.png",
-        "assets/textures/skybox/top.png",
-        "assets/textures/skybox/bottom.png",
-        "assets/textures/skybox/front.png",
-        "assets/textures/skybox/back.png"
+        "assets/textures/skybox/sunny/right.png",
+        "assets/textures/skybox/sunny/left.png",
+        "assets/textures/skybox/sunny/top.png",
+        "assets/textures/skybox/sunny/bottom.png",
+        "assets/textures/skybox/sunny/front.png",
+        "assets/textures/skybox/sunny/back.png"
     };
     if (!load(faces)) {
         std::cerr << "Failed to load skybox!" << std::endl;
@@ -110,19 +111,54 @@ unsigned int Skybox::loadCubemap(const std::vector<std::string>& faces) {
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 
+    // Tightly packed rows. The default of 4 silently skews any image whose row length in
+    // bytes is not a multiple of 4, which is every odd width in RGB.
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    int faceSize = 0;
+
     int width, height, nrChannels;
     for (unsigned int i = 0; i < faces.size(); i++) {
         unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
-        if (data) {
-            GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
-            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-                         0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-            stbi_image_free(data);
-        } else {
+        if (!data) {
             std::cerr << "Cubemap texture failed to load: " << faces[i] << std::endl;
-            stbi_image_free(data);
+            glDeleteTextures(1, &textureID);
             return 0;
         }
+
+        // Every one of these is checked here because GL will not tell you. A non-square
+        // face raises GL_INVALID_VALUE and stores nothing, and faces of differing sizes
+        // leave the cubemap incomplete -- both of which render as a black sky with no
+        // error anywhere, since the files themselves loaded fine.
+        const char* problem = nullptr;
+        if (width != height) {
+            problem = "is not square";
+        } else if (faceSize != 0 && width != faceSize) {
+            problem = "does not match the size of the first face";
+        } else if (nrChannels != 3 && nrChannels != 4) {
+            problem = "has an unsupported channel count";
+        }
+
+        if (problem) {
+            std::cerr << "Cubemap face " << faces[i] << ' ' << problem
+                      << " (" << width << 'x' << height << ", " << nrChannels
+                      << " channels";
+            if (faceSize != 0) {
+                std::cerr << "; first face was " << faceSize << "px";
+            }
+            std::cerr << ")" << std::endl;
+
+            stbi_image_free(data);
+            glDeleteTextures(1, &textureID);
+            return 0;
+        }
+
+        faceSize = width;
+
+        GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                     0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        stbi_image_free(data);
     }
 
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

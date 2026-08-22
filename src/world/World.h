@@ -13,6 +13,7 @@
 #include <vector>
 #include <queue>
 #include <chrono>
+#include <climits>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -65,7 +66,16 @@ public:
     Chunk* getChunk(const glm::ivec3& chunkPos);
     Chunk* getChunkAt(int worldX, int worldY, int worldZ);
 
-    void setRenderDistance(int distance) { renderDistance = distance; }
+    // Invalidating the cached chunk position is the point: update() only reloads chunks
+    // when the player crosses a chunk boundary, so without this a new render distance did
+    // nothing at all until they happened to walk into the next chunk.
+    void setRenderDistance(int distance) {
+        if (distance == renderDistance) {
+            return;
+        }
+        renderDistance = distance;
+        lastCameraChunkPos = glm::ivec3(INT_MAX, INT_MAX, INT_MAX);
+    }
     int getRenderDistance() const { return renderDistance; }
     int getLoadedChunkCount() const { return m_chunks.size(); }
     const Biome* getCurrentPlayerBiome(float cameraX, float cameraZ) const;
