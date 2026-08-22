@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 
 #include "src/rendering/ShaderManager.h"
+#include "src/world/World.h"
 
 class HighlightBox {
 public:

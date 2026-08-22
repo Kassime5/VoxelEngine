@@ -18,9 +18,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#ifndef __EMSCRIPTEN__
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include "src/core/ImGUIManager.h"
+#endif
 
 #include "src/core/ImGUIManager.h"
 #include "src/core/Window.h"
@@ -44,13 +47,11 @@ namespace {
     Engine* g_engine = nullptr;
 #endif
 
-    constexpr float NEAR_PLANE = 0.25f;
+    constexpr float NEAR_PLANE = 0.1f;
     constexpr float FAR_PLANE = 1000.0f;
     constexpr float REACH_DISTANCE = 5.0f;
 
-#ifdef __EMSCRIPTEN__
-    constexpr const char* IMGUI_GLSL_VERSION = "#version 300 es";
-#else
+#ifndef __EMSCRIPTEN__
     constexpr const char* IMGUI_GLSL_VERSION = "#version 460";
 #endif
 }
@@ -58,7 +59,9 @@ namespace {
 Engine::Engine() = default;
 
 Engine::~Engine() {
+#ifndef __EMSCRIPTEN__
     shutdownImGui();
+#endif
 }
 
 bool Engine::initialize(unsigned int width, unsigned int height, const char* title) {
@@ -139,9 +142,11 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 
     playerController = std::make_unique<PlayerController>(player.get(), world.get());
 
+#ifndef __EMSCRIPTEN__
     initImGui();
     imGUIManager = std::make_unique<ImGUIManager>(*world, player->getCamera(), renderDistance,
                                                   *player, dayCycle);
+#endif
 
     highlightBox = std::make_unique<HighlightBox>();
 
@@ -160,6 +165,7 @@ void Engine::step() {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+#ifndef __EMSCRIPTEN__
     // Capture flags from the frame ImGui drew last
     if (imguiInitialised && showDebugUI) {
         const ImGuiIO& io = ImGui::GetIO();
@@ -167,12 +173,15 @@ void Engine::step() {
     } else {
         InputManager::getInstance().setUICapture(false, false);
     }
+#endif
 
     InputManager::getInstance().update();
 
+#ifndef __EMSCRIPTEN__
     if (InputManager::getInstance().isActionPressed(GameAction::ToggleDebug)) {
         showDebugUI = !showDebugUI;
     }
+#endif
     player->update(deltaTime, *world);
     playerController->processInput(deltaTime);
     world->update(player->getPosition());
@@ -209,9 +218,11 @@ void Engine::step() {
 
     hudRenderer->drawCrosshair();
 
+#ifndef __EMSCRIPTEN__
     if (showDebugUI) {
         imGUIManager->drawImGUIElements(deltaTime);
     }
+#endif
 
 #ifdef __EMSCRIPTEN__
     publishWebStats();
@@ -238,6 +249,8 @@ void Engine::run() {
     }
 }
 
+#ifndef __EMSCRIPTEN__
+
 void Engine::initImGui() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -257,6 +270,8 @@ void Engine::shutdownImGui() {
     ImGui::DestroyContext();
     imguiInitialised = false;
 }
+
+#endif // !__EMSCRIPTEN__
 
 void Engine::onFramebufferResize(int width, int height) {
     framebufferWidth = width;

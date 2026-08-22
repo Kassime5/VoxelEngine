@@ -5,6 +5,8 @@
 #include "World.h"
 #include "src/game/Player.h"
 
+#include <limits>
+
 namespace {
 #ifdef GLFWVOXEL_SINGLE_THREADED
     // to avoid hangs on single threads
@@ -411,31 +413,55 @@ const Biome* World::getCurrentPlayerBiome(float cameraX, float cameraZ) const {
 }
 
 RaycastResult World::raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance) {
-    RaycastResult result{false, glm::ivec3(0), glm::ivec3(0)};
+    RaycastResult result{false, glm::vec3(0.0f), glm::vec3(0.0f)};
 
-    glm::vec3 pos = origin;
-    glm::vec3 step = glm::normalize(direction) * 0.1f;
+    const glm::vec3 dir = glm::normalize(direction);
+    glm::ivec3 cell(static_cast<int>(std::floor(origin.x)),
+                    static_cast<int>(std::floor(origin.y)),
+                    static_cast<int>(std::floor(origin.z)));
 
-    float distance = 0.0f;
-    glm::ivec3 lastPos = glm::floor(pos);
+    // Per axis: which way we walk, how far to the first boundary, and how far between boundaries once marching.
+    glm::ivec3 stepDir(0);
+    glm::vec3 tMax(0.0f);
+    glm::vec3 tDelta(0.0f);
 
-    while (distance < maxDistance) {
-        pos += step;
-        distance += 0.1f;
+    constexpr float NEVER = std::numeric_limits<float>::max();
 
-        glm::ivec3 blockPos(std::floor(pos.x), std::floor(pos.y), std::floor(pos.z));
+    for (int axis = 0; axis < 3; ++axis) {
+        if (dir[axis] > 0.0f) {
+            stepDir[axis] = 1;
+            tMax[axis] = (static_cast<float>(cell[axis] + 1) - origin[axis]) / dir[axis];
+        } else if (dir[axis] < 0.0f) {
+            stepDir[axis] = -1;
+            tMax[axis] = (origin[axis] - static_cast<float>(cell[axis])) / -dir[axis];
+        } else {
+            // Parallel to this axis, so its boundaries are never reached.
+            stepDir[axis] = 0;
+            tMax[axis] = NEVER;
+        }
+        tDelta[axis] = dir[axis] != 0.0f ? std::abs(1.0f / dir[axis]) : NEVER;
+    }
 
-        if (blockPos != lastPos) {
-            BlockType block = getBlock(blockPos.x, blockPos.y, blockPos.z);
+    float travelled = 0.0f;
+    while (travelled < maxDistance) {
+        // Cross whichever boundary comes first. That axis is the face we enter through.
+        const int axis = (tMax.x < tMax.y) ? ((tMax.x < tMax.z) ? 0 : 2)
+                                           : ((tMax.y < tMax.z) ? 1 : 2);
 
-            if (block != BlockType::Air) {
-                result.hit = true;
-                result.hitPos = blockPos;
-                result.hitNormal = blockPos - lastPos;
-                return result;
-            }
+        travelled = tMax[axis];
+        if (travelled >= maxDistance) {
+            break;
+        }
 
-            lastPos = blockPos;
+        tMax[axis] += tDelta[axis];
+        cell[axis] += stepDir[axis];
+
+        if (getBlock(cell.x, cell.y, cell.z) != BlockType::Air) {
+            result.hit = true;
+            result.hitPos = cell;
+            result.hitNormal = glm::vec3(0.0f);
+            result.hitNormal[axis] = static_cast<float>(stepDir[axis]);
+            return result;
         }
     }
 

@@ -45,20 +45,21 @@ if(NOT EMSCRIPTEN)
     )
 endif()
 
-# ImGui
-add_library(imgui
-        thirdparty/imgui/imgui.cpp
-        thirdparty/imgui/imgui_draw.cpp
-        thirdparty/imgui/imgui_tables.cpp
-        thirdparty/imgui/imgui_widgets.cpp
-        thirdparty/imgui/backends/imgui_impl_glfw.cpp
-        thirdparty/imgui/backends/imgui_impl_opengl3.cpp
-)
-target_include_directories(imgui PUBLIC
-        thirdparty/imgui
-        thirdparty/imgui/backends
-)
+# ImGui -- desktop only. The web build's debug UI is the page's own DOM panel, fed by
+# Engine::publishWebStats, so the library and its two backends are left out of the wasm.
 if(NOT EMSCRIPTEN)
+    add_library(imgui
+            thirdparty/imgui/imgui.cpp
+            thirdparty/imgui/imgui_draw.cpp
+            thirdparty/imgui/imgui_tables.cpp
+            thirdparty/imgui/imgui_widgets.cpp
+            thirdparty/imgui/backends/imgui_impl_glfw.cpp
+            thirdparty/imgui/backends/imgui_impl_opengl3.cpp
+    )
+    target_include_directories(imgui PUBLIC
+            thirdparty/imgui
+            thirdparty/imgui/backends
+    )
     target_link_libraries(imgui PUBLIC glfw glad)
 endif()
 
@@ -84,10 +85,7 @@ target_include_directories(GLFWVoxel PRIVATE
         thirdparty
 )
 
-target_link_libraries(GLFWVoxel PRIVATE
-        glm::glm
-        imgui
-)
+target_link_libraries(GLFWVoxel PRIVATE glm::glm)
 
 if(GLFWVOXEL_SINGLE_THREADED)
     target_compile_definitions(GLFWVoxel PRIVATE GLFWVOXEL_SINGLE_THREADED)
@@ -129,7 +127,7 @@ if(EMSCRIPTEN)
     set_property(TARGET GLFWVoxel APPEND PROPERTY LINK_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
 else()
-    target_link_libraries(GLFWVoxel PRIVATE glfw glad openal)
+    target_link_libraries(GLFWVoxel PRIVATE glfw glad openal imgui)
 
     # Configure-time copy: edited assets only reach the build directory on the next CMake
     # re-run, not on the next build.

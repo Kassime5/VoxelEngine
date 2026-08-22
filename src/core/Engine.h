@@ -11,10 +11,13 @@
 
 struct GLFWwindow;
 
+#ifndef __EMSCRIPTEN__
+class ImGUIManager;
+#endif
+
 class ChunkRenderer;
 class HighlightBox;
 class HUDRenderer;
-class ImGUIManager;
 class Player;
 class PlayerController;
 class Skybox;
@@ -53,15 +56,14 @@ private:
 #endif
 
     bool vsync = false;
-    bool imguiInitialised = false;
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
 
 #ifdef __EMSCRIPTEN__
-    // the browser build has the DOM panel, so ImGui starts hidden
-    bool showDebugUI = false;
+    // ImGui is not compiled into the web build at all
     float statsPublishTimer = 0.0f;
 #else
+    bool imguiInitialised = false;
     bool showDebugUI = true;
 #endif
 
@@ -78,12 +80,16 @@ private:
     std::unique_ptr<ChunkRenderer> chunkRenderer;
     std::unique_ptr<World> world;
     std::unique_ptr<PlayerController> playerController;
+#ifndef __EMSCRIPTEN__
     std::unique_ptr<ImGUIManager> imGUIManager;
+#endif
     std::unique_ptr<HighlightBox> highlightBox;
 
+    void onFramebufferResize(int width, int height);
+#ifndef __EMSCRIPTEN__
     void initImGui();
     void shutdownImGui();
-    void onFramebufferResize(int width, int height);
+#endif
 
 #ifdef __EMSCRIPTEN__
     void publishWebStats();

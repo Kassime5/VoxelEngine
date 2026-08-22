@@ -1,4 +1,7 @@
-﻿//
+﻿#ifndef __EMSCRIPTEN__
+// ImGui is desktop-only
+
+//
 // Created by maxim on 18/01/2026.
 //
 
@@ -37,3 +40,5 @@ private:
 
 
 #endif //GLFWVOXEL_IMGUIMANAGER_H
+
+#endif // !__EMSCRIPTEN__

@@ -1,4 +1,7 @@
-﻿//
+#ifndef __EMSCRIPTEN__
+// ImGui is desktop-only
+
+//
 // Created by maxim on 18/01/2026.
 //
 
@@ -111,3 +114,4 @@ std::string ImGUIManager::formatNumber(int number) {
     return str;
 }
 
+#endif // !__EMSCRIPTEN__
