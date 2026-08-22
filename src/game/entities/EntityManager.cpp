@@ -12,8 +12,6 @@
 EntityManager::EntityManager()
 {
     ShaderManager& sm = ShaderManager::getInstance();
-    // sm.addShader("animal", "assets/shader/entity/animal.vs.glsl",
-    //                             "assets/shader/entity/animal.fs.glsl");
     sm.addShader("animal", "assets/shader/model/model.vs.glsl",
         "assets/shader/model/model.fs.glsl");
     animalShader = sm.getShader("animal");
