@@ -206,6 +206,24 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	#new-world {
+		display: block;
+		width: 100%;
+		margin-top: 0.9rem;
+		appearance: none;
+		border: solid 1px var(--accent);
+		background: transparent;
+		color: var(--accent);
+		font: inherit;
+		font-size: 0.78rem;
+		padding: 0.45rem;
+		border-radius: 0.3rem;
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+	#new-world:hover { background: var(--accent); color: #0f1115; }
+	#panel.locked #new-world { opacity: 0.35; pointer-events: none; }
+
 	.sliders {
 		margin-top: 0.9rem;
 		padding-top: 0.75rem;
@@ -254,6 +272,7 @@
 			<dt data-i18n="spaceKey"></dt><dd data-i18n="jump"></dd>
 			<dt data-i18n="shiftKey"></dt><dd data-i18n="sprint"></dd>
 			<dt>F</dt><dd data-i18n="fly"></dd>
+			<dt>R</dt><dd data-i18n="regen"></dd>
 			<dt>Esc</dt><dd data-i18n="release"></dd>
 		</dl>
 
@@ -281,7 +300,10 @@
 			<dt data-i18n="lBiome"></dt><dd id="s-biome">&ndash;</dd>
 			<dt data-i18n="lTime"></dt><dd id="s-clock">&ndash;</dd>
 			<dt data-i18n="lPosition"></dt><dd id="s-pos">&ndash;</dd>
+			<dt data-i18n="lSeed"></dt><dd id="s-seed">&ndash;</dd>
 		</dl>
+
+		<button id="new-world" type="button" data-i18n="newWorld"></button>
 
 		<div class="sliders">
 			<label>
@@ -310,7 +332,7 @@
 			sub: "A voxel engine written from scratch in C++ and OpenGL, compiled to WebAssembly. Terrain is generated and meshed in the browser.",
 			move: "Move", look: "Look around", breakPlace: "Break / place block",
 			jump: "Jump (ascend while flying)", sprint: "Sprint", fly: "Toggle flight",
-			release: "Release the mouse",
+			regen: "Generate a new world", release: "Release the mouse",
 			mouseKey: "Mouse", lmbKey: "LMB / RMB", spaceKey: "Space", shiftKey: "Shift",
 			loading: "Loading…", play: "Click to play",
 			hint: "Click the view to capture the mouse again",
@@ -319,6 +341,7 @@
 			lChunks: "Chunks", lEntities: "Entities", lBiome: "Biome", lTime: "Time",
 			lPosition: "Position", lRenderDistance: "Render distance",
 			lTimeOfDay: "Time of day", lDayLength: "Day length",
+			lSeed: "Seed", newWorld: "New world  (R)",
 			lockNote: "Press Esc to adjust these"
 		},
 		fr: {
@@ -326,7 +349,7 @@
 			sub: "Un moteur voxel écrit de zéro en C++ et OpenGL, compilé en WebAssembly. Le terrain est généré et maillé dans le navigateur.",
 			move: "Se déplacer", look: "Regarder", breakPlace: "Casser / poser un bloc",
 			jump: "Sauter (monter en vol)", sprint: "Courir", fly: "Activer le vol",
-			release: "Libérer la souris",
+			regen: "Générer un nouveau monde", release: "Libérer la souris",
 			mouseKey: "Souris", lmbKey: "Clic G / D", spaceKey: "Espace", shiftKey: "Maj",
 			loading: "Chargement…", play: "Cliquer pour jouer",
 			hint: "Cliquez sur la vue pour recapturer la souris",
@@ -335,6 +358,7 @@
 			lChunks: "Chunks", lEntities: "Entités", lBiome: "Biome", lTime: "Heure",
 			lPosition: "Position", lRenderDistance: "Distance d'affichage",
 			lTimeOfDay: "Heure du jour", lDayLength: "Durée du jour",
+			lSeed: "Seed", newWorld: "Nouveau monde  (R)",
 			lockNote: "Appuyez sur Échap pour les régler"
 		}
 	};
@@ -360,8 +384,14 @@
 	// --- stats panel ---------------------------------------------------------------
 
 	var field = {};
-	["fps", "tris", "draws", "chunks", "entities", "biome", "clock", "pos"].forEach(function (k) {
+	["fps", "tris", "draws", "chunks", "entities", "biome", "clock", "pos", "seed"].forEach(function (k) {
 		field[k] = document.getElementById("s-" + k);
+	});
+
+	document.getElementById("new-world").addEventListener("click", function () {
+		callEngine("_voxel_new_world");
+		// The seed changes immediately; let the next stats push report it.
+		this.blur();   // otherwise Space/Enter would re-trigger the button, not the game
 	});
 
 	var slider = {
@@ -419,6 +449,7 @@
 		field.biome.textContent = s.biome;
 		field.clock.textContent = s.clock;
 		field.pos.textContent = Math.round(s.x) + ", " + Math.round(s.y) + ", " + Math.round(s.z);
+		field.seed.textContent = s.seed;
 
 		if (dragging !== "tod") slider.tod.value = s.timeOfDay;
 		value.tod.textContent = s.clock;

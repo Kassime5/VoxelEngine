@@ -78,6 +78,15 @@ public:
     }
     int getRenderDistance() const { return renderDistance; }
     int getLoadedChunkCount() const { return m_chunks.size(); }
+
+    using SeedType = siv::PerlinNoise::seed_type;
+
+    // Throws away every chunk and entity and rebuilds the world from a new seed
+    void regenerate(SeedType newSeed);
+    void regenerate() { regenerate(randomSeed()); }
+
+    SeedType getSeed() const { return seed; }
+    static SeedType randomSeed();
     const Biome* getCurrentPlayerBiome(float cameraX, float cameraZ) const;
     bool hasTerrainAt(int worldX, int worldZ);
     RaycastResult raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance = 10.0f);
@@ -121,9 +130,11 @@ private:
     bool processOneMeshBuildTask();
     void pumpChunkWork(std::chrono::microseconds budget);
 
-    // Noise
-    const siv::PerlinNoise::seed_type seed;
-    const siv::PerlinNoise perlinNoise;
+    // Noise. Not const: regenerate() reseeds them in place rather than rebuilding the
+    // World, which would dangle the World* and World& that PlayerController and the debug
+    // UI hold onto.
+    siv::PerlinNoise::seed_type seed;
+    siv::PerlinNoise perlinNoise;
     std::unique_ptr<WorleyBiome> worleyBiome;
 
     glm::ivec3 worldToChunkPos(int worldX, int worldY, int worldZ) const;

@@ -54,16 +54,20 @@ static const float skyboxVertices[] = {
      1.0f, -1.0f,  1.0f
 };
 
-Skybox::Skybox() : VAO(0), VBO(0), textureID(0) {
-    std::vector<std::string> faces = {
-        "assets/textures/skybox/sunny/right.png",
-        "assets/textures/skybox/sunny/left.png",
-        "assets/textures/skybox/sunny/top.png",
-        "assets/textures/skybox/sunny/bottom.png",
-        "assets/textures/skybox/sunny/front.png",
-        "assets/textures/skybox/sunny/back.png"
-    };
-    if (!load(faces)) {
+namespace {
+    // Cubemap face order is +X -X +Y -Y +Z -Z, which GL_TEXTURE_CUBE_MAP_POSITIVE_X + i walks.
+    std::vector<std::string> cubemapFaces(const std::string& directory) {
+        std::vector<std::string> faces;
+        for (const char* face : {"right", "left", "top", "bottom", "front", "back"}) {
+            faces.push_back(directory + '/' + face + ".png");
+        }
+        return faces;
+    }
+}
+
+Skybox::Skybox() : VAO(0), VBO(0), dayTextureID(0), nightTextureID(0) {
+    if (!load(cubemapFaces("assets/textures/skybox/sunny"),
+              cubemapFaces("assets/textures/skybox/night"))) {
         std::cerr << "Failed to load skybox!" << std::endl;
     }
 
@@ -84,7 +88,10 @@ Skybox::Skybox() : VAO(0), VBO(0), textureID(0) {
 Skybox::~Skybox() {
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    glDeleteTextures(1, &textureID);
+    glDeleteTextures(1, &dayTextureID);
+    if (nightTextureID != dayTextureID) {
+        glDeleteTextures(1, &nightTextureID);
+    }
 }
 
 void Skybox::setupMesh() {
@@ -101,9 +108,20 @@ void Skybox::setupMesh() {
     glBindVertexArray(0);
 }
 
-bool Skybox::load(const std::vector<std::string>& faces) {
-    textureID = loadCubemap(faces);
-    return textureID != 0;
+bool Skybox::load(const std::vector<std::string>& dayFaces, const std::vector<std::string>& nightFaces) {
+    dayTextureID = loadCubemap(dayFaces);
+    if (dayTextureID == 0) {
+        std::cerr << "Day skybox missing" << std::endl;
+        return false;
+    }
+
+    nightTextureID = loadCubemap(nightFaces);
+    if (nightTextureID == 0) {
+        std::cerr << "Night skybox missing" << std::endl;
+        return false;
+    }
+
+    return true;
 }
 
 unsigned int Skybox::loadCubemap(const std::vector<std::string>& faces) {
@@ -114,6 +132,9 @@ unsigned int Skybox::loadCubemap(const std::vector<std::string>& faces) {
     // Tightly packed rows. The default of 4 silently skews any image whose row length in
     // bytes is not a multiple of 4, which is every odd width in RGB.
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    // Cubemap faces are defined top-left origin, so the global stb flip has to be off.
+    stbi_set_flip_vertically_on_load(false);
 
     int faceSize = 0;
 
@@ -170,7 +191,7 @@ unsigned int Skybox::loadCubemap(const std::vector<std::string>& faces) {
     return textureID;
 }
 
-void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
+void Skybox::draw(const glm::mat4& view, const glm::mat4& projection, const SunState& sun) {
     glDepthFunc(GL_LEQUAL);
 
     skyboxShader->use();
@@ -179,13 +200,20 @@ void Skybox::draw(const glm::mat4& view, const glm::mat4& projection) {
 
     skyboxShader->setMat4("view", skyboxView);
     skyboxShader->setMat4("projection", projection);
-    skyboxShader->setInt("skybox", 0);  // Set texture unit
+    skyboxShader->setInt("daySkybox", 0);
+    skyboxShader->setInt("nightSkybox", 1);
+    skyboxShader->setFloat("dayBlend", sun.intensity);
 
     glBindVertexArray(VAO);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, dayTextureID);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, nightTextureID);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
+
+    // Leave unit 0 current; everything else here assumes it is.
+    glActiveTexture(GL_TEXTURE0);
 
     glDepthFunc(GL_LESS);
 }

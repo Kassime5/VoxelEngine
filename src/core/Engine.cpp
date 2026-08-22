@@ -82,7 +82,7 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 #endif
 
     // Pure CPU state, so it can be built before there is a context.
-    player = std::make_unique<Player>(glm::vec3(0, 200, 0));
+    player = std::make_unique<Player>(Player::SPAWN_POSITION);
 
     window = std::make_unique<Window>(width, height, title);
     if (window->getWindow() == nullptr) {
@@ -177,6 +177,10 @@ void Engine::step() {
 
     InputManager::getInstance().update();
 
+    if (InputManager::getInstance().isActionPressed(GameAction::ReloadChunks)) {
+        regenerateWorld();
+    }
+
 #ifndef __EMSCRIPTEN__
     if (InputManager::getInstance().isActionPressed(GameAction::ToggleDebug)) {
         showDebugUI = !showDebugUI;
@@ -212,7 +216,7 @@ void Engine::step() {
         highlightBox->draw(highlightedBlock, projection, view);
     }
 
-    skybox->draw(view, projection);
+    skybox->draw(view, projection, sun);
     // After the skybox: both sit against the far plane, so the later draw is the visible one.
     skyBodyRenderer->draw(view, projection, sun);
 
@@ -230,6 +234,17 @@ void Engine::step() {
 
     glfwSwapBuffers(*window);
     InputManager::getInstance().endFrame();
+}
+
+void Engine::regenerateWorld() {
+    if (!world || !player) {
+        return;
+    }
+
+    world->regenerate();
+    player->respawn(Player::SPAWN_POSITION);
+
+    std::cout << "New world, seed " << world->getSeed() << std::endl;
 }
 
 void Engine::setRenderDistance(int distance) {
@@ -308,7 +323,7 @@ void Engine::publishWebStats() {
         "{\"fps\":%.0f,\"frameMs\":%.2f,\"drawCalls\":%d,\"triangles\":%d,"
         "\"chunksRendered\":%d,\"chunksLoaded\":%d,\"entities\":%d,"
         "\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"biome\":\"%s\",\"clock\":\"%s\","
-        "\"renderDistance\":%d,\"dayLength\":%.0f,\"timeOfDay\":%.4f}",
+        "\"renderDistance\":%d,\"dayLength\":%.0f,\"timeOfDay\":%.4f,\"seed\":%u}",
         deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f,
         deltaTime * 1000.0f,
         stats.getDrawCalls(), stats.getTriangles(),
@@ -317,7 +332,8 @@ void Engine::publishWebStats() {
         position.x, position.y, position.z,
         biome ? biome->getName().c_str() : "-",
         dayCycle.getClockString().c_str(),
-        renderDistance, dayCycle.getDayLength(), dayCycle.getTimeOfDay());
+        renderDistance, dayCycle.getDayLength(), dayCycle.getTimeOfDay(),
+        static_cast<unsigned int>(world->getSeed()));
 
     EM_ASM({
         if (window.voxelStats) {
@@ -339,6 +355,10 @@ EMSCRIPTEN_KEEPALIVE void voxel_set_time_of_day(float fraction) {
 
 EMSCRIPTEN_KEEPALIVE void voxel_set_day_length(float seconds) {
     if (g_engine) g_engine->getDayCycle().setDayLength(seconds);
+}
+
+EMSCRIPTEN_KEEPALIVE void voxel_new_world() {
+    if (g_engine) g_engine->regenerateWorld();
 }
 
 }

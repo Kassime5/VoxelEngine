@@ -129,9 +129,23 @@ if(EMSCRIPTEN)
 else()
     target_link_libraries(GLFWVoxel PRIVATE glfw glad openal imgui)
 
-    # Configure-time copy: edited assets only reach the build directory on the next CMake
-    # re-run, not on the next build.
-    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+    # The assets get their own graph node rather than a POST_BUILD command, which would be
+    # skipped on an asset-only edit since the target is already linked. Hashes before
+    # writing, and never prunes -- files deleted from the source tree linger until cleaned.
+    file(GLOB_RECURSE GLFWVOXEL_ASSETS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/*")
+    set(GLFWVOXEL_ASSET_STAMP "${CMAKE_CURRENT_BINARY_DIR}/assets.stamp")
+
+    add_custom_command(OUTPUT "${GLFWVOXEL_ASSET_STAMP}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:GLFWVoxel>/assets"
+            COMMAND ${CMAKE_COMMAND} -E touch "${GLFWVOXEL_ASSET_STAMP}"
+            DEPENDS ${GLFWVOXEL_ASSETS}
+            COMMENT "Syncing assets to build directory"
+    )
+
+    add_custom_target(GLFWVoxelAssets DEPENDS "${GLFWVOXEL_ASSET_STAMP}")
+    add_dependencies(GLFWVoxel GLFWVoxelAssets)
 
     add_custom_command(TARGET GLFWVoxel POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different

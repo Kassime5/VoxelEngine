@@ -9,6 +9,8 @@
 #include <vector>
 #include <glm/glm.hpp>
 
+#include "src/world/DayCycle.h"
+
 class Shader;
 
 class Skybox {
@@ -16,12 +18,13 @@ public:
     Skybox();
     ~Skybox();
 
-    bool load(const std::vector<std::string>& faces);
-    void draw(const glm::mat4& view, const glm::mat4& projection);
+    bool load(const std::vector<std::string>& dayFaces, const std::vector<std::string>& nightFaces);
+    void draw(const glm::mat4& view, const glm::mat4& projection, const SunState& sun);
 
 private:
     unsigned int VAO, VBO;
-    unsigned int textureID;
+    unsigned int dayTextureID;
+    unsigned int nightTextureID;
 
     void setupMesh();
     unsigned int loadCubemap(const std::vector<std::string>& faces);

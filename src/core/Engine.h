@@ -45,6 +45,9 @@ public:
     void setRenderDistance(int distance);
     DayCycle& getDayCycle() { return dayCycle; }
 
+    // Rebuilds the world from a fresh seed and drops the player back at spawn
+    void regenerateWorld();
+
 private:
     int framebufferWidth = 0;
     int framebufferHeight = 0;

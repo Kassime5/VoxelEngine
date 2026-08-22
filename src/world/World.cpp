@@ -6,6 +6,7 @@
 #include "src/game/Player.h"
 
 #include <limits>
+#include <random>
 
 namespace {
 #ifdef GLFWVOXEL_SINGLE_THREADED
@@ -14,11 +15,40 @@ namespace {
 #endif
 }
 
+World::SeedType World::randomSeed() {
+    std::random_device rd;
+    return static_cast<SeedType>(rd());
+}
+
 World::World(Player& _player, const TextureAtlas& _textureAtlas)
     : player(_player), textureAtlas(_textureAtlas), renderDistance(8),
-      lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX), seed(12345), perlinNoise(seed)
+      lastCameraChunkPos(INT_MAX, INT_MAX, INT_MAX), seed(randomSeed()), perlinNoise(seed)
 {
     worleyBiome = std::make_unique<WorleyBiome>(seed, 384);
+#ifndef GLFWVOXEL_SINGLE_THREADED
+    initThreadPool(6, 6);
+#endif
+}
+
+void World::regenerate(SeedType newSeed) {
+    // Order matters
+    shutdownThreadPool();
+
+    {
+        std::lock_guard<std::mutex> lock(pendingEntitySpawnsMutex);
+        pendingEntitySpawns = {};
+    }
+
+    m_chunks.clear();
+    entityManager.clear();
+
+    seed = newSeed;
+    perlinNoise.reseed(seed);
+    worleyBiome = std::make_unique<WorleyBiome>(seed, 384);
+
+    // update() only reloads chunks when the player crosses a chunk boundary, so the cached position has to be invalidated
+    lastCameraChunkPos = glm::ivec3(INT_MAX, INT_MAX, INT_MAX);
+
 #ifndef GLFWVOXEL_SINGLE_THREADED
     initThreadPool(6, 6);
 #endif

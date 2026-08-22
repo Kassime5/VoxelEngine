@@ -149,12 +149,6 @@ void PlayerController::processDebugInput() {
         // TODO: Capture and save screenshot
         std::cout << "Screenshot saved!" << std::endl;
     }
-
-    // Reload chunks (with modifier)
-    if (input.isActionPressed(GameAction::ReloadChunks)) {
-        // TODO: Force chunk reload
-        std::cout << "Reloading chunks..." << std::endl;
-    }
 }
 
 RaycastResult PlayerController::getTargetedBlock() const {

@@ -3,9 +3,13 @@ out vec4 FragColor;
 
 in vec3 TexCoords;
 
-uniform samplerCube skybox;
+uniform samplerCube daySkybox;
+uniform samplerCube nightSkybox;
+uniform float dayBlend;
 
 void main()
 {
-    FragColor = texture(skybox, TexCoords);
+    vec3 day = texture(daySkybox, TexCoords).rgb;
+    vec3 night = texture(nightSkybox, TexCoords).rgb;
+    FragColor = vec4(mix(night, day, dayBlend), 1.0);
 }

@@ -32,6 +32,11 @@ public:
     std::vector<Entity*> getEntitiesInChunk(const glm::ivec3& chunkPos) const;
 
     void toggleHitboxes() { showHitboxes = !showHitboxes; }
+
+    void clear() {
+        entities.clear();
+        spatialGrid.clear();
+    }
 private:
     DebugHitbox debugHitbox;
     bool showHitboxes = false;

@@ -13,6 +13,15 @@ Player::Player(const glm::vec3& startPosition)
     updateBoundingBox();
 }
 
+void Player::respawn(const glm::vec3& startPosition) {
+    position = startPosition;
+    velocity = glm::vec3(0.0f);
+    onGround = false;
+    flying = true;
+    updateBoundingBox();
+    updateCamera();
+}
+
 void Player::update(float deltaTime, World& world) {
     // Hold still until there is ground to stand on
     if (!flying && !world.hasTerrainAt(static_cast<int>(std::floor(position.x)),

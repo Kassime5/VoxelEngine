@@ -14,7 +14,11 @@
 
 class Player {
 public:
+    static constexpr glm::vec3 SPAWN_POSITION{0.0f, 100.0f, 0.0f};
+
     Player(const glm::vec3& startPosition);
+
+    void respawn(const glm::vec3& startPosition);
 
     void update(float deltaTime, World& world);
     void processMovement(bool forward, bool backward, bool left, bool right, bool sprinting, float deltaTime);
@@ -42,7 +46,7 @@ private:
     glm::vec3 position;
     glm::vec3 velocity;
     AABB boundingBox;
-    bool flying = false;
+    bool flying = true;
 
     bool onGround;
 

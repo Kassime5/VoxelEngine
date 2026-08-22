@@ -333,13 +333,11 @@ void InputManager::setupDefaultBindings() {
     bindAction(GameAction::ToggleHitBox, InputBinding(GLFW_KEY_F3));
     bindAction(GameAction::TogglePause, InputBinding(GLFW_KEY_ESCAPE), InputContext::Any);
     bindAction(GameAction::ToggleInventory, InputBinding(GLFW_KEY_E));
-    // F1 rather than F3, which ToggleHitBox already owns. On the web build this is what
-    // brings the ImGui panel up, since the page's own stats panel is the default there.
     bindAction(GameAction::ToggleDebug, InputBinding(GLFW_KEY_F1), InputContext::Any);
 
     // Misc
     bindAction(GameAction::Screenshot, InputBinding(GLFW_KEY_F2));
-    bindAction(GameAction::ReloadChunks, InputBinding(GLFW_KEY_R, GLFW_MOD_CONTROL));
+    bindAction(GameAction::ReloadChunks, InputBinding(GLFW_KEY_R));
 }
 
 InputState InputManager::determineInputState(InputState current, bool isPressed) const {
