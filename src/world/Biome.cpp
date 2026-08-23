@@ -4,66 +4,76 @@
 
 #include "Biome.h"
 #include "Chunk.h"
+#include "Structures.h"
 
 class ForestBiome : public Biome {
 public:
     ForestBiome() {
         name = "Forest";
         biomeId = 1;
-        waterLevel = 32;
         temperature = 0.6f;
         humidity = 0.7f;
         spawnWeight = 40.0f;
     }
 
+    // Floors sit above SEA_LEVEL so only the blend into an ocean cell puts land underwater.
     float getBaseHeight(int worldX, int worldZ, const siv::PerlinNoise* noise) const {
         float baseNoise = getHeightNoise(worldX, worldZ, noise, 0.01f, 4);
-        return 24.0f + baseNoise * 32.0f;
+        return SEA_LEVEL + 2.0f + baseNoise * 32.0f;
     }
 
     float getStructureSpawnChance() const override { return 0.15f; }
 
-    void decorate(Chunk* chunk, int localX, int localZ, int surfaceY, const siv::PerlinNoise* noise, uint32_t seed) const {
-        float grassChance = static_cast<float>((seed ^ 0x54321) % 1000) / 1000.0f;
-        if (grassChance < 0.3f) {
-            if (surfaceY < Chunk::HEIGHT) {
-                BlockType surfaceBlock = chunk->getBlock(localX, surfaceY - 1, localZ);
-                if (surfaceBlock == BlockType::Grass) {
-                    chunk->setBlock(localX, surfaceY, localZ, BlockType::TallGrass);
-                }
-            }
+    void decorate(Chunk* chunk, int localX, int localZ, int surfaceY,
+                  const siv::PerlinNoise* noise, uint32_t seed) const override {
+        if (featureFor(seed) != Feature::Grass) {
             return;
         }
 
-        float treeChance = static_cast<float>((seed ^ 0x12345) % 1000) / 1000.0f;
-
-        if (treeChance < 0.01f) { // 5% chance for a tree
-            int treeHeight = 4 + (seed % 3); // Random height 4-6
-
-            // Tree trunk
-            for (int y = 0; y < treeHeight; y++) {
-                if (surfaceY + y < Chunk::HEIGHT) {
-                    chunk->setBlock(localX, surfaceY + y, localZ, BlockType::Wood);
-                }
-            }
-
-            int leafY = surfaceY + treeHeight;
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    for (int dy = 0; dy < 2; dy++) {
-                        int x = localX + dx;
-                        int z = localZ + dz;
-                        int y = leafY + dy;
-
-                        if (x >= 0 && x < Chunk::SIZE &&
-                            z >= 0 && z < Chunk::SIZE &&
-                            y < Chunk::HEIGHT) {
-                            chunk->setBlock(x, y, z, BlockType::Leaves);
-                            }
-                    }
-                }
-            }
+        if (surfaceY < Chunk::HEIGHT &&
+            chunk->getBlock(localX, surfaceY - 1, localZ) == BlockType::Grass) {
+            chunk->setBlock(localX, surfaceY, localZ, BlockType::TallGrass);
         }
+    }
+
+    void placeStructure(ChunkBlockSink& sink, int worldX, int surfaceY, int worldZ,
+                        uint32_t seed, const TerrainSampler& terrain) const override {
+        switch (featureFor(seed)) {
+        case Feature::Oak:
+            structures::tree(sink, worldX, surfaceY, worldZ, seed, 4, 3, 1, 2);
+            break;
+        case Feature::TallTree:
+            structures::tree(sink, worldX, surfaceY, worldZ, seed, 7, 4, 1, 3);
+            break;
+        case Feature::BushyTree:
+            structures::tree(sink, worldX, surfaceY, worldZ, seed, 3, 2, 2, 2);
+            break;
+        case Feature::FallenLog:
+            structures::fallenLog(sink, worldX, surfaceY, worldZ, seed, terrain);
+            break;
+        default:
+            break;
+        }
+    }
+
+private:
+    enum class Feature { None, Grass, Oak, TallTree, BushyTree, FallenLog };
+
+    // One roll cut into disjoint bands. decorate() and placeStructure() both run over this
+    // column and have to reach the same verdict, so they share the draw rather than rolling
+    // separately and hoping the two agree.
+    Feature featureFor(uint32_t seed) const {
+        const float r = roll(seed, 0x54321u);
+        if (r < 0.300f) return Feature::Grass;
+        if (r < 0.307f) return Feature::Oak;
+        if (r < 0.311f) return Feature::TallTree;
+        if (r < 0.314f) return Feature::BushyTree;
+        if (r < 0.317f) return Feature::FallenLog;
+        return Feature::None;
+    }
+
+    static float roll(uint32_t seed, uint32_t salt) {
+        return static_cast<float>((seed ^ salt) % 1000) / 1000.0f;
     }
 };
 
@@ -72,7 +82,6 @@ public:
     DesertBiome() {
         name = "Desert";
         biomeId = 2;
-        waterLevel = 32;
         temperature = 1.0f;
         humidity = 0.1f;
         spawnWeight = 15.0f;
@@ -83,15 +92,21 @@ public:
 
     float getBaseHeight(int worldX, int worldZ, const siv::PerlinNoise* noise) const {
         float baseNoise = getHeightNoise(worldX, worldZ, noise, 0.02f, 2);
-        return 24.0f + baseNoise * 2.0f;
+        return SEA_LEVEL + 2.0f + baseNoise * 3.0f;
     }
 
     int getSubSurfaceDepth() const override { return 5; }
 
     float getStructureSpawnChance() const override { return 0.05f; }
 
-    // void decorate(Chunk* chunk, int localX, int localZ, int surfaceY,
-    //               const siv::PerlinNoise* noise, uint32_t seed) const override;
+    void placeStructure(ChunkBlockSink& sink, int worldX, int surfaceY, int worldZ,
+                        uint32_t seed, const TerrainSampler& terrain) const override {
+
+        if (static_cast<float>((seed ^ 0x9A5Fu) % 1000) / 1000.0f >= 0.004f) {
+            return;
+        }
+        structures::cactus(sink, worldX, surfaceY, worldZ, seed);
+    }
 };
 
 class MountainBiome : public Biome {
@@ -99,7 +114,6 @@ public:
     MountainBiome() {
         name = "Mountain";
         biomeId = 3;
-        waterLevel = 32;
         temperature = 0.2f;
         humidity = 0.4f;
         spawnWeight = 25.0f;
@@ -134,6 +148,16 @@ public:
     int getSurfaceDepth() const override { return 1; }
     int getSubSurfaceDepth() const override { return 2; }
     float getStructureSpawnChance() const override { return 0.02f; }
+
+    void placeStructure(ChunkBlockSink& sink, int worldX, int surfaceY, int worldZ,
+                        uint32_t seed, const TerrainSampler& terrain) const override {
+        const float r = static_cast<float>((seed ^ 0x7C3Du) % 1000) / 1000.0f;
+        if (r < 0.005f) {
+            structures::boulder(sink, worldX, surfaceY, worldZ, seed, terrain);
+        } else if (r < 0.008f) {
+            structures::tree(sink, worldX, surfaceY, worldZ, seed, 6, 3, 1, 4);
+        }
+    }
 };
 
 class OceanBiome : public Biome {
@@ -141,19 +165,20 @@ public:
     OceanBiome() {
         name = "Ocean";
         biomeId = 4;
-        waterLevel = 32;
         temperature = 0.5f;
         humidity = 1.0f;
-        spawnWeight = 1.0f;
+        spawnWeight = 5.0f; // todo chage after tests
         surfaceBlock = BlockType::Sand;
         subSurfaceBlock = BlockType::Sand;
-        stoneBlock = BlockType::Sand;
+        stoneBlock = BlockType::Stone;
     }
 
     float getBaseHeight(int worldX, int worldZ, const siv::PerlinNoise* noise) const {
-        float baseNoise = getHeightNoise(worldX, worldZ, noise, 0.015f, 3);
-        return 5.0f + baseNoise * 5.0f;
+        float baseNoise = getHeightNoise(worldX, worldZ, noise, 0.004f, 2);
+        return SEA_LEVEL - 10.0f + baseNoise * 6.0f;
     }
+
+    int getSubSurfaceDepth() const override { return 4; }
 
     bool canSpawnStructures() const override { return false; }
 };

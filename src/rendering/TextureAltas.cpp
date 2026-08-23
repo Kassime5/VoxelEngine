@@ -108,6 +108,10 @@ void TextureAtlas::cleanup() {
     }
 }
 
+namespace {
+    constexpr int WOOD_END_GRAIN_TILE = 0;
+}
+
 BlockTexture TextureAtlas::getBlockTexture(BlockType block) const {
     BlockTexture tex;
 
@@ -147,10 +151,22 @@ BlockTexture TextureAtlas::getBlockTexture(BlockType block) const {
             tex.sideTile = 91;
             tex.bottomTile = 0;
             break;
+        // Lying down: bark everywhere
+        case BlockType::WoodX:
+        case BlockType::WoodZ:
+            tex.topTile = 91;
+            tex.sideTile = 91;
+            tex.bottomTile = 91;
+            break;
         case BlockType::TallGrass:
             tex.topTile = 56;
             tex.sideTile = 56;
             tex.bottomTile = 56;
+            break;
+        case BlockType::Water:
+            tex.topTile = 7;
+            tex.sideTile = 7;
+            tex.bottomTile = 7;
             break;
         default:
             tex.topTile = 0;
@@ -165,6 +181,14 @@ BlockTexture TextureAtlas::getBlockTexture(BlockType block) const {
 uint8_t TextureAtlas::getBlockFaceTileIndex(BlockType block, BlockFace face) const {
     BlockTexture tex = getBlockTexture(block);
     int tileIndex;
+
+    // Show wood interior on the edges
+    if (block == BlockType::WoodX && (face == BlockFace::Front || face == BlockFace::Back)) {
+        return static_cast<uint8_t>(WOOD_END_GRAIN_TILE);
+    }
+    if (block == BlockType::WoodZ && (face == BlockFace::Right || face == BlockFace::Left)) {
+        return static_cast<uint8_t>(WOOD_END_GRAIN_TILE);
+    }
 
     switch (face) {
     case BlockFace::Top:

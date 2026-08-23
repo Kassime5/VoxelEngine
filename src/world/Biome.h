@@ -12,8 +12,13 @@
 #include <cstring>
 #include "PerlinNoise/PerlinNoise.hpp"
 
+#include "Structures.h"
+
 class Chunk;
+class ChunkBlockSink;
 class World;
+
+constexpr int SEA_LEVEL = 32;
 
 struct Structure {
     std::string name;
@@ -64,9 +69,13 @@ public:
     virtual float getStructureSpawnChance() const { return 0.0f; }
     virtual std::vector<Structure> getStructures() const { return {}; }
 
-    // Post-generation decorations
+    // Single-column decorations, which can never cross a chunk border.
     virtual void decorate(Chunk* chunk, int localX, int localZ, int surfaceY,
                          const siv::PerlinNoise* noise, uint32_t seed) const {}
+
+    // Anything spanning more than its own column
+    virtual void placeStructure(ChunkBlockSink& sink, int worldX, int surfaceY, int worldZ,
+                                uint32_t seed, const TerrainSampler& terrain) const {}
 
     // Biome features
     virtual int getWaterLevel() const { return waterLevel; }
@@ -74,7 +83,7 @@ public:
     virtual float getHumidity() const { return humidity; }
     virtual float getSpawnWeight() const { return spawnWeight; }
 
-    // Transition blending with other biomes TODO: e
+    // Transition blending with other biomes
     virtual bool canBlendWith(const Biome* other) const { return true; }
     virtual float getBlendFactor() const { return 1.0f; }
 
@@ -86,7 +95,7 @@ protected:
     std::string name;
     uint8_t biomeId;
 
-    int waterLevel = 32;
+    int waterLevel = SEA_LEVEL;
     float temperature = 0.5f;
     float humidity = 0.5f;
     float spawnWeight = 1.0f;

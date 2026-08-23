@@ -57,9 +57,34 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
     chunkDirty = true;
 }
 
+namespace {
+
+uint32_t columnSeed(int worldX, int worldZ, uint32_t worldSeed) {
+    uint32_t h = worldSeed ^ (static_cast<uint32_t>(worldX) * 73856093u) ^ (static_cast<uint32_t>(worldZ) * 19349663u);
+    h = (h ^ 61u) ^ (h >> 16);
+    h += (h << 3);
+    h ^= (h >> 4);
+    h *= 0x27d4eb2du;
+    h ^= (h >> 15);
+    return h;
+}
+
+}
+
+ChunkBlockSink::ChunkBlockSink(Chunk& _chunk)
+    : chunk(_chunk),
+      origin(_chunk.getPosition().x * Chunk::SIZE, 0, _chunk.getPosition().z * Chunk::SIZE) {}
+
+void ChunkBlockSink::set(int worldX, int worldY, int worldZ, BlockType type) {
+    // Chunk::setBlock bounds-checks, so out-of-chunk writes drop here by design.
+    chunk.setBlock(worldX - origin.x, worldY - origin.y, worldZ - origin.z, type);
+}
+
 void Chunk::generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
     generateTerrain(perlinNoise, worleyBiome);
     decorateTerrain(perlinNoise, worleyBiome);
+    // After decoration, so trunks overwrites grass e.g.
+    placeStructures(perlinNoise, worleyBiome);
 
     chunkDirty = true;
     chunkState.store(ChunkState::Generated);
@@ -78,18 +103,23 @@ void Chunk::generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* wo
             int surfaceDepth = biome->getSurfaceDepth();
             int subSurfaceDepth = biome->getSubSurfaceDepth();
 
+            // anything near the waterline turns to sand.
+            const bool shore = terrainHeight <= SEA_LEVEL + BEACH_HEIGHT;
+
             for (int y = 0; y < HEIGHT; y++) {
                 if (y < terrainHeight - surfaceDepth - subSurfaceDepth) {
                     chunkBlocks[x][y][z] = biome->getStoneBlock(worldX, y, worldZ);
                 }
                 else if (y < terrainHeight - surfaceDepth) {
-                    chunkBlocks[x][y][z] = biome->getSubSurfaceBlock(worldX, y, worldZ);
+                    chunkBlocks[x][y][z] = shore ? BlockType::Sand
+                                                 : biome->getSubSurfaceBlock(worldX, y, worldZ);
                 }
                 else if (y < terrainHeight) {
-                    chunkBlocks[x][y][z] = biome->getSurfaceBlock(worldX, y, worldZ);
+                    chunkBlocks[x][y][z] = shore ? BlockType::Sand
+                                                 : biome->getSurfaceBlock(worldX, y, worldZ);
                 }
-                else if (y < biome->getWaterLevel()) {
-                    chunkBlocks[x][y][z] = BlockType::Air; // TODO: Water
+                else if (y < SEA_LEVEL) {
+                    chunkBlocks[x][y][z] = BlockType::Water;
                 }
                 else {
                     chunkBlocks[x][y][z] = BlockType::Air;
@@ -102,14 +132,14 @@ void Chunk::generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* wo
 void Chunk::decorateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
     for (int x = 0; x < SIZE; x++) {
         for (int z = 0; z < SIZE; z++) {
+            // Water is not a ground block, so this lands on the seabed in flooded columns.
             int surfaceY = getTerrainHeight(x, z);
 
-            if (surfaceY > 0 && surfaceY < HEIGHT) {
-                uint32_t seed = chunkPosition.x * 73856093 + chunkPosition.z * 19349663 +
-                               x * 8191 + z * 131071;
-
+            if (surfaceY >= SEA_LEVEL && surfaceY < HEIGHT) {
                 int worldX = chunkPosition.x * SIZE + x;
                 int worldZ = chunkPosition.z * SIZE + z;
+
+                uint32_t seed = columnSeed(worldX, worldZ, worleyBiome->getSeed());
 
                 const Biome* biome = worleyBiome->getBiomeAt(worldX, worldZ);
                 biome->decorate(this, x, z, surfaceY, perlinNoise, seed);
@@ -118,49 +148,38 @@ void Chunk::decorateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* wo
     }
 }
 
-void Chunk::placeStructures(WorleyBiome* worleyBiome) {
-    // if (!structureSpawnPoint.has_value())
-    //     return;
-    //
-    // const Biome* dominantBiome = cachedBiomeData.getDominantBiome();
-    // if (!dominantBiome || !dominantBiome->canSpawnStructures())
-    //     return;
-    //
-    // auto structures = dominantBiome->getStructures();
-    // if (structures.empty())
-    //     return;
-    //
-    // // TODO: Selection logic
-    // const Structure& structure = structures[0];
-    //
-    // glm::ivec3 pos = structureSpawnPoint.value();
-    //
-    // for (int x = 0; x < structure.size.x; x++) {
-    //     for (int y = 0; y < structure.size.y; y++) {
-    //         for (int z = 0; z < structure.size.z; z++) {
-    //             BlockType block = structure.getBlock(x, y, z);
-    //
-    //             if (block != BlockType::Air) {
-    //                 int localX = pos.x + x - structure.anchor.x;
-    //                 int localY = pos.y + y - structure.anchor.y;
-    //                 int localZ = pos.z + z - structure.anchor.z;
-    //
-    //                 // Only place if within chunk bounds
-    //                 if (localX >= 0 && localX < SIZE &&
-    //                     localY >= 0 && localY < HEIGHT &&
-    //                     localZ >= 0 && localZ < SIZE) {
-    //                     setBlock(localX, localY, localZ, block);
-    //                 }
-    //                 // TODO: For large structures, could store cross-chunk data
-    //             }
-    //         }
-    //     }
-    // }
+void Chunk::placeStructures(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
+    ChunkBlockSink sink(*this);
+    const uint32_t worldSeed = worleyBiome->getSeed();
+    const TerrainSampler terrain{worleyBiome, perlinNoise};
+
+    // sweeps past the chunk to verify if it needs to place a structure
+    for (int x = -STRUCTURE_MARGIN; x < SIZE + STRUCTURE_MARGIN; x++) {
+        for (int z = -STRUCTURE_MARGIN; z < SIZE + STRUCTURE_MARGIN; z++) {
+            const int worldX = chunkPosition.x * SIZE + x;
+            const int worldZ = chunkPosition.z * SIZE + z;
+
+            const Biome* biome = worleyBiome->getBiomeAt(worldX, worldZ);
+            if (!biome->canSpawnStructures()) {
+                continue;
+            }
+
+            // Height comes from noise
+            const int surfaceY = static_cast<int>(
+                worleyBiome->getBlendedHeight(worldX, worldZ, perlinNoise));
+            if (surfaceY < SEA_LEVEL || surfaceY >= HEIGHT) {
+                continue;
+            }
+
+            biome->placeStructure(sink, worldX, surfaceY, worldZ,
+                                  columnSeed(worldX, worldZ, worldSeed), terrain);
+        }
+    }
 }
 
 int Chunk::getTerrainHeight(int localX, int localZ) const {
     for (int y = HEIGHT - 1; y >= 0; y--) {
-        if (getBlock(localX, y, localZ) == BlockType::Grass || getBlock(localX, y, localZ) == BlockType::Sand) {
+        if (isGroundBlock(getBlock(localX, y, localZ))) {
             return y + 1;
         }
     }

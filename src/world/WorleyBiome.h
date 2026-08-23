@@ -16,6 +16,10 @@ public:
 
     // ChunkBiomeData generateChunkBiomeData(const glm::ivec3& chunkPos) const;
 
+    // Structure placement hashes world columns against, so a chunk and its neighbour
+    // agree on what grows where.
+    uint32_t getSeed() const { return seed; }
+
     const Biome* getBiomeAt(int x, int z) const;
     float getBlendedHeight(int x, int z, const siv::PerlinNoise* perlin) const;
     bool shouldSpawnStructure(const glm::ivec3& chunkPos, const Biome* biome) const;

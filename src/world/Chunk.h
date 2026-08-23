@@ -47,6 +47,12 @@ public:
     static constexpr int SIZE = 64;
     static constexpr int HEIGHT = 256;
 
+    // How far outside itself a chunk looks for structures whose footprint reaches in
+    static constexpr int STRUCTURE_MARGIN = 4;
+
+    // How far above SEA_LEVEL the sand band reaches before the biome's own surface takes over.
+    static constexpr int BEACH_HEIGHT = 2;
+
     Chunk(const glm::ivec3& position);
     ~Chunk() = default;
 
@@ -89,7 +95,7 @@ private:
 
     void generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
     void decorateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
-    void placeStructures(WorleyBiome* worleyBiome);
+    void placeStructures(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
 
     bool isBlockAt(int x, int y, int z) const;
     bool shouldRenderFace(int x, int y, int z, int nx, int ny, int nz, World *world) const;
@@ -106,5 +112,18 @@ private:
                   const TextureAtlas* atlas);
 };
 
+
+// Takes world coordinates and keeps only what lands inside one chunk. Structure code emits
+// its whole shape through this and never learns where the chunk borders are.
+class ChunkBlockSink {
+public:
+    explicit ChunkBlockSink(Chunk& chunk);
+
+    void set(int worldX, int worldY, int worldZ, BlockType type);
+
+private:
+    Chunk& chunk;
+    glm::ivec3 origin;
+};
 
 #endif //GLFWVOXEL_CHUNK_H

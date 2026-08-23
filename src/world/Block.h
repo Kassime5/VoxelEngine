@@ -15,7 +15,11 @@ enum class BlockType : uint8_t {
     Snow,
     Wood,
     Leaves,
-    TallGrass
+    TallGrass,
+    // Wood lying along X or Z
+    WoodX,
+    WoodZ,
+    Water
 };
 
 enum class BlockRenderType : uint8_t {
@@ -30,14 +34,31 @@ inline BlockRenderType getBlockRenderType(BlockType type) {
     case BlockType::TallGrass:
         return BlockRenderType::CrossModel;
     case BlockType::Leaves:
+    case BlockType::Water:
         return BlockRenderType::Transparent;
     default:
         return BlockRenderType::Solid;
     }
 }
 
+// isGroundBlock == something can stand on
+inline bool isGroundBlock(BlockType type) {
+    switch (type) {
+    case BlockType::Air:
+    case BlockType::TallGrass:
+    case BlockType::Leaves:
+    case BlockType::Wood:
+    case BlockType::WoodX:
+    case BlockType::WoodZ:
+    case BlockType::Water:
+        return false;
+    default:
+        return true;
+    }
+}
+
 inline bool canGoThrough(BlockType type) {
-    return type == BlockType::Air || type == BlockType::TallGrass;
+    return type == BlockType::Air || type == BlockType::TallGrass || type == BlockType::Water;
 }
 
 inline bool isBlockOpaque(BlockType type) {
