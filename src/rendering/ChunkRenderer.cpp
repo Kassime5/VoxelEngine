@@ -10,6 +10,7 @@
 #include "Profiler.h"
 #include "ShaderManager.h"
 #include "src/debug/RenderStats.h"
+#include "Skybox.h"
 #include "src/world/Chunk.h"
 #include "src/world/World.h"
 
@@ -25,7 +26,8 @@ bool ChunkRenderer::loadTextureAtlas(const char* atlasPath, int tilesPerRow) {
 }
 
 void ChunkRenderer::render(const World& world, const glm::mat4& projection, const glm::mat4& view,
-                           const SunState& sun, const glm::vec3& viewPos, bool underwater) {
+                           const SunState& sun, const glm::vec3& viewPos, bool underwater,
+                           const Skybox& skybox) {
     PROFILE_FUNCTION();
 
     cullChunks(world, projection * view);
@@ -40,8 +42,23 @@ void ChunkRenderer::render(const World& world, const glm::mat4& projection, cons
     terrainShader->setMat4("view", view);
 
     terrainShader->setVec3("viewPos", viewPos);
-    terrainShader->setVec3("fogColor", underwater ? WATER_FOG_COLOR : FOG_COLOR);
-    terrainShader->setFloat("fogDensity", underwater ? WATER_FOG_DENSITY : FOG_DENSITY);
+    terrainShader->setBool("useSkyFog", !underwater);
+    terrainShader->setVec3("fogColor", WATER_FOG_COLOR);
+
+    const float edge = static_cast<float>(world.getRenderDistance() * Chunk::SIZE);
+    terrainShader->setFloat("fogDensity",
+        underwater ? WATER_FOG_DENSITY
+                   : (edge > 0.0f ? FOG_EDGE_FALLOFF / edge : 0.0f));
+
+    // dayBlend matches what Skybox::draw uses, so the two agree on the same sky.
+    terrainShader->setInt("daySkybox", DAY_SKY_UNIT);
+    terrainShader->setInt("nightSkybox", NIGHT_SKY_UNIT);
+    terrainShader->setFloat("dayBlend", sun.intensity);
+
+    glActiveTexture(GL_TEXTURE0 + DAY_SKY_UNIT);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.getDayTexture());
+    glActiveTexture(GL_TEXTURE0 + NIGHT_SKY_UNIT);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.getNightTexture());
 
     textureAtlas.bind(0);
 

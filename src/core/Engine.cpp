@@ -226,7 +226,7 @@ void Engine::step() {
         static_cast<int>(std::floor(eye.y)),
         static_cast<int>(std::floor(eye.z))) == BlockType::Water;
 
-    chunkRenderer->render(*world, projection, view, sun, eye, underwater);
+    chunkRenderer->render(*world, projection, view, sun, eye, underwater, *skybox);
     entityManager->render(projection, view);
     entityManager->renderDebug(projection, view);
 

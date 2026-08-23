@@ -21,6 +21,10 @@ public:
     bool load(const std::vector<std::string>& dayFaces, const std::vector<std::string>& nightFaces);
     void draw(const glm::mat4& view, const glm::mat4& projection, const SunState& sun);
 
+    // Terrain fog samples these too
+    unsigned int getDayTexture() const { return dayTextureID; }
+    unsigned int getNightTexture() const { return nightTextureID; }
+
 private:
     unsigned int VAO, VBO;
     unsigned int dayTextureID;

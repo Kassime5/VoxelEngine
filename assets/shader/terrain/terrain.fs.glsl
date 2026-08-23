@@ -16,9 +16,14 @@ uniform float sunIntensity;
 uniform float passAlpha;
 
 uniform vec3 viewPos;
-// 0 unless the camera is underwater. Losing contrast with distance is what reads as depth.
 uniform float fogDensity;
+
+// Above water the fog colour is the sky itself
+uniform bool useSkyFog;
 uniform vec3 fogColor;
+uniform samplerCube daySkybox;
+uniform samplerCube nightSkybox;
+uniform float dayBlend;
 
 // Floor brightness at night and at midday
 const float NIGHT_AMBIENT = 0.15;
@@ -42,8 +47,23 @@ void main()
     vec3 lit = texColor.rgb * lightColor * light;
 
     if (fogDensity > 0.0) {
-        float fog = 1.0 - exp(-length(FragPos - viewPos) * fogDensity);
-        lit = mix(lit, fogColor, clamp(fog, 0.0, 1.0));
+        vec3 toFrag = FragPos - viewPos;
+        float dist = length(toFrag);
+
+        vec3 fogTarget = fogColor;
+        float fog;
+
+        if (useSkyFog) {
+            vec3 dir = toFrag / max(dist, 1e-4);
+            fogTarget = mix(texture(nightSkybox, dir).rgb, texture(daySkybox, dir).rgb, dayBlend);
+            // density is tuned to hide the edge of the loaded world
+            float d = dist * fogDensity;
+            fog = 1.0 - exp(-d * d);
+        } else {
+            fog = 1.0 - exp(-dist * fogDensity);
+        }
+
+        lit = mix(lit, fogTarget, clamp(fog, 0.0, 1.0));
     }
 
     // Foliage stays opaque past the cutoff, so it never depends on draw order

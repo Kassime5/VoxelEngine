@@ -14,6 +14,7 @@
 
 class Chunk;
 class Shader;
+class Skybox;
 class World;
 
 // owns every GPU-side resource needed to draw terrain
@@ -24,7 +25,6 @@ public:
     ChunkRenderer(const ChunkRenderer&) = delete;
     ChunkRenderer& operator=(const ChunkRenderer&) = delete;
 
-    inline static const glm::vec3 FOG_COLOR{0.70f, 0.70f, 0.70f};
     inline static const glm::vec3 WATER_FOG_COLOR{0.10f, 0.35f, 0.55f};
     static constexpr float WATER_TINT_ALPHA = 0.55f;
 
@@ -33,12 +33,15 @@ public:
 
     // Culls once, then replays the surviving chunks for the opaque, transparent and water passes.
     void render(const World& world, const glm::mat4& projection, const glm::mat4& view,
-                const SunState& sun, const glm::vec3& viewPos, bool underwater);
+                const SunState& sun, const glm::vec3& viewPos, bool underwater,
+                const Skybox& skybox);
 
 private:
     static constexpr float WATER_ALPHA = 0.7f;
-    static constexpr float FOG_DENSITY = 0.002f;
     static constexpr float WATER_FOG_DENSITY = 0.04f;
+    static constexpr float FOG_EDGE_FALLOFF = 1.8f;
+    static constexpr int DAY_SKY_UNIT = 2;
+    static constexpr int NIGHT_SKY_UNIT = 3;
 
     struct VisibleChunk {
         glm::vec3 worldPos;
