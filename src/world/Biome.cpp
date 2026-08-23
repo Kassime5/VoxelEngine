@@ -167,7 +167,7 @@ public:
         biomeId = 4;
         temperature = 0.5f;
         humidity = 1.0f;
-        spawnWeight = 5.0f; // todo chage after tests
+        spawnWeight = 50.0f; // todo chage after tests
         surfaceBlock = BlockType::Sand;
         subSurfaceBlock = BlockType::Sand;
         stoneBlock = BlockType::Stone;

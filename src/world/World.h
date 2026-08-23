@@ -40,6 +40,7 @@ struct ChunkMeshTask {
     Chunk* chunk;
     MeshData meshData;
     MeshData transparentMeshData;
+    MeshData waterMeshData;
 };
 
 struct RaycastResult {
@@ -143,6 +144,11 @@ private:
     void loadChunksAroundPosition(const glm::ivec3& centerChunkPos);
     void unloadDistantChunks(const glm::ivec3& centerChunkPos);
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
+
+    // A chunk meshes its borders against whatever its neighbours held at the time, so those
+    // borders go stale when a neighbour arrives or a seam block changes. Main thread only.
+    void queueRemesh(Chunk* chunk);
+    void collectStaleNeighbours(const glm::ivec3& chunkPos, std::vector<Chunk*>& out);
 
     EntityManager entityManager;
 

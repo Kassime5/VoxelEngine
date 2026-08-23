@@ -168,6 +168,11 @@ BlockTexture TextureAtlas::getBlockTexture(BlockType block) const {
             tex.sideTile = 7;
             tex.bottomTile = 7;
             break;
+        case BlockType::Cactus:
+            tex.topTile = 88;
+            tex.sideTile = 88;
+            tex.bottomTile = 88;
+            break;
         default:
             tex.topTile = 0;
             tex.sideTile = 0;

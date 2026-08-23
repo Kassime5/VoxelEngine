@@ -28,6 +28,12 @@ enum class ChunkState {
     Ready            // Mesh uploaded to GPU, ready to render
 };
 
+// Water is blended, so it meshes separately from everything else.
+enum class MeshPass {
+    Opaque,
+    Water
+};
+
 struct MeshData {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -60,7 +66,8 @@ public:
 
     // Regular mesh
     void buildMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
-    void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas, World *world, int axis);
+    void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas, World *world, int axis,
+                        MeshPass pass);
     void uploadMeshToGPU(const MeshData& meshData);
     void draw() const;
 
@@ -70,6 +77,12 @@ public:
     void drawTransparent() const;
     bool isTransparentMeshEmpty() const { return chunkTransparentMesh.isEmpty(); }
 
+    // Water mesh
+    void buildWaterMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
+    void uploadWaterMeshToGPU(const MeshData& meshData);
+    void drawWater() const;
+    bool isWaterMeshEmpty() const { return chunkWaterMesh.isEmpty(); }
+
     glm::ivec3 getPosition() const { return chunkPosition; }
 
     bool isDirty() const { return chunkDirty; }
@@ -77,6 +90,11 @@ public:
 
     ChunkState getState() const { return chunkState.load(); }
     void setState(ChunkState state) { chunkState.store(state); }
+
+    // A chunk only ever arrives once, so its neighbours only need invalidating once.
+    // Main thread only, which is what stops the remesh cascade from looping.
+    bool hasNotifiedNeighbours() const { return notifiedNeighbours; }
+    void markNeighboursNotified() { notifiedNeighbours = true; }
 
     BlockType getBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockType type);
@@ -88,6 +106,10 @@ private:
 
     ChunkMesh chunkMesh;
     ChunkMesh chunkTransparentMesh;
+    ChunkMesh chunkWaterMesh;
+
+    bool hasWater = false;
+    bool notifiedNeighbours = false;
 
     bool chunkDirty;
     std::atomic<ChunkState> chunkState;

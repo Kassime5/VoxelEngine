@@ -177,7 +177,7 @@ void Player::resolveCollisionAxis(float& delta, int axis, World& world) {
             for (int z = minZ; z <= maxZ; z++) {
                 BlockType block = world.getBlock(x, y, z);
 
-                if (isBlockSolid(block)) {
+                if (!canGoThrough(block)) {
                     AABB blockBox{
                         glm::vec3(x, y, z),
                         glm::vec3(x + 1, y + 1, z + 1)
@@ -210,9 +210,4 @@ void Player::updateBoundingBox() {
 
 void Player::updateCamera() {
     camera.Position = position + glm::vec3(0, EYE_HEIGHT, 0);
-}
-
-bool Player::isBlockSolid(BlockType type) const {
-    return type != BlockType::Air &&
-           type != BlockType::TallGrass;
 }

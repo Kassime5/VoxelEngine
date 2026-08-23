@@ -219,7 +219,14 @@ void Engine::step() {
 
     const SunState sun = dayCycle.getSun();
 
-    chunkRenderer->render(*world, projection, view, sun);
+    // One check feeds both the terrain fog and the screen tint, so they cannot disagree.
+    const glm::vec3 eye = player->getCamera().Position;
+    const bool underwater = world->getBlock(
+        static_cast<int>(std::floor(eye.x)),
+        static_cast<int>(std::floor(eye.y)),
+        static_cast<int>(std::floor(eye.z))) == BlockType::Water;
+
+    chunkRenderer->render(*world, projection, view, sun, eye, underwater);
     entityManager->render(projection, view);
     entityManager->renderDebug(projection, view);
 
@@ -232,6 +239,15 @@ void Engine::step() {
     skybox->draw(view, projection, sun);
     // After the skybox: both sit against the far plane, so the later draw is the visible one.
     skyBodyRenderer->draw(view, projection, sun);
+
+    // After the sky so it covers it too, before the HUD so that stays readable.
+    if (underwater) {
+        hudRenderer->drawRect(framebufferWidth * 0.5f, framebufferHeight * 0.5f,
+                              static_cast<float>(framebufferWidth),
+                              static_cast<float>(framebufferHeight),
+                              glm::vec4(ChunkRenderer::WATER_FOG_COLOR,
+                                        ChunkRenderer::WATER_TINT_ALPHA));
+    }
 
     hudRenderer->drawCrosshair();
     hotbarRenderer->draw(*hudRenderer, player->getHotbar(), chunkRenderer->getTextureAtlas());

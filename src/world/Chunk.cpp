@@ -54,10 +54,20 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
         return;
     }
     chunkBlocks[x][y][z] = type;
+    if (type == BlockType::Water) {
+        hasWater = true;
+    }
     chunkDirty = true;
 }
 
 namespace {
+
+bool blockInPass(BlockType type, MeshPass pass) {
+    if (pass == MeshPass::Water) {
+        return type == BlockType::Water;
+    }
+    return type != BlockType::Air && type != BlockType::Water;
+}
 
 uint32_t columnSeed(int worldX, int worldZ, uint32_t worldSeed) {
     uint32_t h = worldSeed ^ (static_cast<uint32_t>(worldX) * 73856093u) ^ (static_cast<uint32_t>(worldZ) * 19349663u);
@@ -120,6 +130,7 @@ void Chunk::generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* wo
                 }
                 else if (y < SEA_LEVEL) {
                     chunkBlocks[x][y][z] = BlockType::Water;
+                    hasWater = true;
                 }
                 else {
                     chunkBlocks[x][y][z] = BlockType::Air;
@@ -193,11 +204,25 @@ void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *
     meshData.vertices.reserve(SIZE * SIZE * 4);
     meshData.indices.reserve(SIZE * SIZE * 6);
 
-    greedyMeshAxis(meshData, atlas, world, 0);
-    greedyMeshAxis(meshData, atlas, world, 1);
-    greedyMeshAxis(meshData, atlas, world, 2);
+    greedyMeshAxis(meshData, atlas, world, 0, MeshPass::Opaque);
+    greedyMeshAxis(meshData, atlas, world, 1, MeshPass::Opaque);
+    greedyMeshAxis(meshData, atlas, world, 2, MeshPass::Opaque);
 
     chunkState.store(ChunkState::MeshBuilt);
+}
+
+void Chunk::buildWaterMeshData(MeshData& meshData, const TextureAtlas *atlas, World *world) {
+    PROFILE_SCOPE("Chunk::buildWaterMeshData");
+
+    meshData.clear();
+    if (!hasWater) return;
+
+    meshData.vertices.reserve(SIZE * SIZE);
+    meshData.indices.reserve(SIZE * SIZE * 2);
+
+    greedyMeshAxis(meshData, atlas, world, 0, MeshPass::Water);
+    greedyMeshAxis(meshData, atlas, world, 1, MeshPass::Water);
+    greedyMeshAxis(meshData, atlas, world, 2, MeshPass::Water);
 }
 
 void Chunk::buildTransparentMeshData(MeshData& meshData, const TextureAtlas *atlas) {
@@ -220,7 +245,8 @@ void Chunk::buildTransparentMeshData(MeshData& meshData, const TextureAtlas *atl
     }
 }
 
-void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World *world, int axis) {
+void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World *world, int axis,
+                           MeshPass pass) {
     // axis: 0=X, 1=Y, 2=Z
     // We'll scan along this axis and mesh the perpendicular plane
     int u = (axis + 1) % 3; // First perpendicular axis
@@ -282,8 +308,10 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World 
                     blockNext = BlockType::Air;
                 }
 
-                bool drawCurrent = blockCurrent != BlockType::Air && blockCurrent != blockNext &&!isBlockOpaque(blockNext);
-                bool drawNext = blockNext != BlockType::Air && blockNext != blockCurrent &&!isBlockOpaque(blockCurrent);
+                // Water/water and solid/solid both fall out of the != test, so no interior
+                // faces reach the blend and the sea cannot stack into opacity.
+                bool drawCurrent = blockInPass(blockCurrent, pass) && blockCurrent != blockNext &&!isBlockOpaque(blockNext);
+                bool drawNext = blockInPass(blockNext, pass) && blockNext != blockCurrent &&!isBlockOpaque(blockCurrent);
 
                 if (drawCurrent) {
                     // Current block facing +axis
@@ -472,6 +500,11 @@ void Chunk::uploadTransparentMeshToGPU(const MeshData& meshData) {
     chunkTransparentMesh.setData(meshData.vertices, meshData.indices);
 }
 
+void Chunk::uploadWaterMeshToGPU(const MeshData& meshData) {
+    PROFILE_SCOPE("Chunk::uploadWaterMeshToGPU");
+    chunkWaterMesh.setData(meshData.vertices, meshData.indices);
+}
+
 bool Chunk::isBlockAt(int x, int y, int z) const {
     if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) {
         return false; // Treat out-of-bounds as air
@@ -548,4 +581,9 @@ void Chunk::draw() const {
 void Chunk::drawTransparent() const {
     if (chunkTransparentMesh.isEmpty()) return;
     chunkTransparentMesh.draw();
+}
+
+void Chunk::drawWater() const {
+    if (chunkWaterMesh.isEmpty()) return;
+    chunkWaterMesh.draw();
 }

@@ -25,7 +25,7 @@ bool ChunkRenderer::loadTextureAtlas(const char* atlasPath, int tilesPerRow) {
 }
 
 void ChunkRenderer::render(const World& world, const glm::mat4& projection, const glm::mat4& view,
-                           const SunState& sun) {
+                           const SunState& sun, const glm::vec3& viewPos, bool underwater) {
     PROFILE_FUNCTION();
 
     cullChunks(world, projection * view);
@@ -39,10 +39,16 @@ void ChunkRenderer::render(const World& world, const glm::mat4& projection, cons
     terrainShader->setMat4("projection", projection);
     terrainShader->setMat4("view", view);
 
+    terrainShader->setVec3("viewPos", viewPos);
+    terrainShader->setVec3("fogColor", underwater ? WATER_FOG_COLOR : FOG_COLOR);
+    terrainShader->setFloat("fogDensity", underwater ? WATER_FOG_DENSITY : FOG_DENSITY);
+
     textureAtlas.bind(0);
 
+    terrainShader->setFloat("passAlpha", 1.0f);
     renderOpaque();
     renderTransparent();
+    renderWater();
 }
 
 void ChunkRenderer::cullChunks(const World& world, const glm::mat4& viewProj) {
@@ -94,4 +100,23 @@ void ChunkRenderer::renderTransparent() const {
     }
 
     glEnable(GL_CULL_FACE);
+}
+
+void ChunkRenderer::renderWater() const {
+    PROFILE_SCOPE("ChunkRenderer::renderWater");
+
+    terrainShader->setFloat("passAlpha", WATER_ALPHA);
+    // Water still depth-tests against terrain, but must not occlude other water.
+    glDepthMask(GL_FALSE);
+
+    for (const VisibleChunk& visible : visibleChunks) {
+        if (visible.chunk->isWaterMeshEmpty())
+            continue;
+
+        terrainShader->setVec3("chunkOffset", visible.worldPos);
+        visible.chunk->drawWater();
+    }
+
+    glDepthMask(GL_TRUE);
+    terrainShader->setFloat("passAlpha", 1.0f);
 }

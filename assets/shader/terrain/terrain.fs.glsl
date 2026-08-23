@@ -12,6 +12,13 @@ uniform vec3 lightDir;
 uniform vec3 lightColor;
 // 0 through the night, 1 with the sun up. Fades across the horizon.
 uniform float sunIntensity;
+// 1 for every pass but water, which is the only geometry that actually blends.
+uniform float passAlpha;
+
+uniform vec3 viewPos;
+// 0 unless the camera is underwater. Losing contrast with distance is what reads as depth.
+uniform float fogDensity;
+uniform vec3 fogColor;
 
 // Floor brightness at night and at midday
 const float NIGHT_AMBIENT = 0.15;
@@ -32,6 +39,13 @@ void main()
     float ambient = mix(NIGHT_AMBIENT, DAY_AMBIENT, sunIntensity);
     float light = (ambient + (1.0 - ambient) * diff) * FaceShade;
 
-    // Opaque past the cutoff, so foliage never depends on draw order
-    FragColor = vec4(texColor.rgb * lightColor * light, 1.0);
+    vec3 lit = texColor.rgb * lightColor * light;
+
+    if (fogDensity > 0.0) {
+        float fog = 1.0 - exp(-length(FragPos - viewPos) * fogDensity);
+        lit = mix(lit, fogColor, clamp(fog, 0.0, 1.0));
+    }
+
+    // Foliage stays opaque past the cutoff, so it never depends on draw order
+    FragColor = vec4(lit, passAlpha);
 }

@@ -121,7 +121,7 @@ bool World::processOneGenerationTask() {
 
         {
             std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
-            meshBuildQueue.push({task.chunk, MeshData(), MeshData()});
+            meshBuildQueue.push({task.chunk, MeshData(), MeshData(), MeshData()});
         }
         meshBuildQueueCV.notify_one();
     }
@@ -190,6 +190,7 @@ bool World::processOneMeshBuildTask() {
         task.chunk->setState(ChunkState::BuildingMesh);
         task.chunk->buildMeshData(task.meshData, &textureAtlas, this);
         task.chunk->buildTransparentMeshData(task.transparentMeshData, &textureAtlas);
+        task.chunk->buildWaterMeshData(task.waterMeshData, &textureAtlas, this);
 
         // Re-checked because the chunk can be unloaded while the mesh is being built.
         if (isChunkLoaded(chunkPos)) {
@@ -238,25 +239,70 @@ void World::pumpChunkWork(std::chrono::microseconds budget) {
     }
 }
 
+void World::queueRemesh(Chunk* chunk) {
+    // Anything not yet Ready is still in flight and will mesh against current data anyway.
+    if (!chunk || chunk->getState() != ChunkState::Ready) {
+        return;
+    }
+
+    chunk->markDirty();
+    chunk->setState(ChunkState::Generated);
+    {
+        std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
+        meshBuildQueue.push({chunk, MeshData(), MeshData(), MeshData()});
+    }
+    meshBuildQueueCV.notify_one();
+}
+
+void World::collectStaleNeighbours(const glm::ivec3& chunkPos, std::vector<Chunk*>& out) {
+    // Chunks span the full world height, so only the four horizontal neighbours share a seam.
+    const glm::ivec3 offsets[4] = {
+        {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}
+    };
+
+    for (const glm::ivec3& offset : offsets) {
+        if (Chunk* neighbour = getChunk(chunkPos + offset)) {
+            out.push_back(neighbour);
+        }
+    }
+}
+
 void World::processGPUUploadQueue(int maxPerFrame) {
     PROFILE_SCOPE("World::processGPUUploadQueue");
 
-    std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
+    // Collected under the upload lock but requeued after it drops: taking the mesh queue
+    // lock while holding this one would be the only place that nests the two.
+    std::vector<Chunk*> staleNeighbours;
 
-    int processed = 0;
-    while (!gpuUploadQueue.empty() && processed < maxPerFrame) {
-        ChunkMeshTask& task = gpuUploadQueue.front();
+    {
+        std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
 
-        glm::ivec3 chunkPos = task.chunk->getPosition();
+        int processed = 0;
+        while (!gpuUploadQueue.empty() && processed < maxPerFrame) {
+            ChunkMeshTask& task = gpuUploadQueue.front();
 
-        if (isChunkLoaded(chunkPos) && task.chunk->getState() == ChunkState::MeshBuilt) {
-            task.chunk->uploadMeshToGPU(task.meshData);
-            task.chunk->uploadTransparentMeshToGPU(task.transparentMeshData);
-            // TODO: Implement proper neighbor remeshing with cycle detection
+            glm::ivec3 chunkPos = task.chunk->getPosition();
+
+            if (isChunkLoaded(chunkPos) && task.chunk->getState() == ChunkState::MeshBuilt) {
+                task.chunk->uploadMeshToGPU(task.meshData);
+                task.chunk->uploadTransparentMeshToGPU(task.transparentMeshData);
+                task.chunk->uploadWaterMeshToGPU(task.waterMeshData);
+
+                // Only on a chunk's first arrival. Remeshing never re-notifies, which is
+                // what makes the cascade terminate instead of ringing between neighbours.
+                if (!task.chunk->hasNotifiedNeighbours()) {
+                    task.chunk->markNeighboursNotified();
+                    collectStaleNeighbours(chunkPos, staleNeighbours);
+                }
+            }
+
+            gpuUploadQueue.pop();
+            processed++;
         }
+    }
 
-        gpuUploadQueue.pop();
-        processed++;
+    for (Chunk* neighbour : staleNeighbours) {
+        queueRemesh(neighbour);
     }
 }
 
@@ -336,12 +382,19 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
         onBlockChange(glm::ivec3(worldX, worldY, worldZ), previous, type);
     }
 
-    if (chunk->getState() == ChunkState::Ready) {
-        chunk->markDirty();
-        chunk->setState(ChunkState::Generated);
-        std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
-        meshBuildQueue.push({chunk, MeshData(), MeshData()});
-        meshBuildQueueCV.notify_one();
+    queueRemesh(chunk);
+
+    // An edit on a seam changes what the neighbour should draw there, so its mesh is stale
+    // too. A corner block touches two of them.
+    if (localPos.x == 0) {
+        queueRemesh(getChunk(chunkPos + glm::ivec3(-1, 0, 0)));
+    } else if (localPos.x == Chunk::SIZE - 1) {
+        queueRemesh(getChunk(chunkPos + glm::ivec3(1, 0, 0)));
+    }
+    if (localPos.z == 0) {
+        queueRemesh(getChunk(chunkPos + glm::ivec3(0, 0, -1)));
+    } else if (localPos.z == Chunk::SIZE - 1) {
+        queueRemesh(getChunk(chunkPos + glm::ivec3(0, 0, 1)));
     }
 }
 Chunk* World::getChunk(const glm::ivec3& chunkPos) {
@@ -491,7 +544,7 @@ RaycastResult World::raycastBlock(const glm::vec3& origin, const glm::vec3& dire
         tMax[axis] += tDelta[axis];
         cell[axis] += stepDir[axis];
 
-        if (getBlock(cell.x, cell.y, cell.z) != BlockType::Air) {
+        if (!canRaycastThrough(getBlock(cell.x, cell.y, cell.z))) {
             result.hit = true;
             result.hitPos = cell;
             result.hitNormal = glm::vec3(0.0f);

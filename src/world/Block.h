@@ -19,7 +19,8 @@ enum class BlockType : uint8_t {
     // Wood lying along X or Z
     WoodX,
     WoodZ,
-    Water
+    Water,
+    Cactus
 };
 
 enum class BlockRenderType : uint8_t {
@@ -67,6 +68,10 @@ inline bool isBlockOpaque(BlockType type) {
 
 inline int printBlockType(BlockType type) {
     return (int)type;
+}
+
+inline bool canRaycastThrough(BlockType type) {
+    return type == BlockType::Air || type == BlockType::Water;
 }
 
 #endif //GLFWVOXEL_BLOCK_H

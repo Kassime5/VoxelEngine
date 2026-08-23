@@ -101,7 +101,7 @@ void cactus(ChunkBlockSink& sink, int worldX, int surfaceY, int worldZ, uint32_t
     const int height = CACTUS_MIN_HEIGHT + static_cast<int>(mix(seed, 0xC4u) % CACTUS_HEIGHT_RANGE);
 
     for (int y = 0; y < height; y++) {
-        sink.set(worldX, surfaceY + y, worldZ, BlockType::Wood);
+        sink.set(worldX, surfaceY + y, worldZ, BlockType::Cactus);
     }
 
     // chance to grow another arm
@@ -114,8 +114,8 @@ void cactus(ChunkBlockSink& sink, int worldX, int surfaceY, int worldZ, uint32_t
     const int armZ = (dir == 2) ? CACTUS_ARM_REACH : (dir == 3 ? -CACTUS_ARM_REACH : 0);
     const int armY = surfaceY + height - 2;
 
-    sink.set(worldX + armX, armY, worldZ + armZ, BlockType::Wood);
-    sink.set(worldX + armX, armY + 1, worldZ + armZ, BlockType::Wood);
+    sink.set(worldX + armX, armY, worldZ + armZ, BlockType::Cactus);
+    sink.set(worldX + armX, armY + 1, worldZ + armZ, BlockType::Cactus);
 }
 
 void boulder(ChunkBlockSink& sink, int worldX, int surfaceY, int worldZ, uint32_t seed,

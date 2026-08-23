@@ -72,8 +72,6 @@ private:
     void resolveCollisionAxis(float& delta, int axis, World& world);
     void updateBoundingBox();
     void updateCamera();
-
-    bool isBlockSolid(BlockType type) const;
 };
 
 
