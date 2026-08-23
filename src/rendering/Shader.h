@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <unordered_map>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
@@ -30,6 +31,11 @@ public:
     void setVec3(const std::string &name, glm::vec3 value) const;
     void setVec4(const std::string &name, glm::vec4 value) const;
 private:
+    std::unordered_map<std::string, GLint> uniformLocations;
+
+    void cacheUniformLocations();
+    GLint location(const std::string& name) const;
+
     static void checkCompileErrors(unsigned int shader, std::string type);
 };
   

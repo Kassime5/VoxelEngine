@@ -114,6 +114,9 @@ private:
     bool hasWater = false;
     bool notifiedNeighbours = false;
 
+    int solidMinY = HEIGHT, solidMaxY = -1;
+    int waterMinY = HEIGHT, waterMaxY = -1;
+
     bool chunkDirty;
     std::atomic<ChunkState> chunkState;
     std::optional<glm::ivec3> structureSpawnPoint;
@@ -121,8 +124,6 @@ private:
     void generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
     void decorateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
     void placeStructures(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
-
-    bool isBlockAt(int x, int y, int z) const;
 
     void addFace(std::vector<Vertex>& vertices, std::vector<unsigned int>& indices,
                  const glm::vec3& pos, int faceIndex, BlockType blockType,

@@ -1,5 +1,7 @@
 ﻿#include "./Shader.h"
 
+#include <vector>
+
 #include "glm/gtc/type_ptr.inl"
 #include "src/core/GL.h"
 
@@ -82,6 +84,44 @@ Shader::Shader(std::string name, const std::string& vertexPath, const std::strin
     // delete the shaders as they're linked into our program now and no longer necessary
     glDeleteShader(vertex);
     glDeleteShader(fragment);
+
+    cacheUniformLocations();
+}
+
+void Shader::cacheUniformLocations() {
+    GLint count = 0;
+    glGetProgramiv(ID, GL_ACTIVE_UNIFORMS, &count);
+
+    GLint maxNameLength = 0;
+    glGetProgramiv(ID, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxNameLength);
+    if (count <= 0 || maxNameLength <= 0) {
+        return;
+    }
+
+    std::vector<char> nameBuffer(static_cast<std::size_t>(maxNameLength));
+    for (GLint i = 0; i < count; ++i) {
+        GLsizei written = 0;
+        GLint size = 0;
+        GLenum type = 0;
+        glGetActiveUniform(ID, static_cast<GLuint>(i), maxNameLength, &written, &size, &type,
+                           nameBuffer.data());
+
+        std::string uniformName(nameBuffer.data(), static_cast<std::size_t>(written));
+        const GLint loc = glGetUniformLocation(ID, uniformName.c_str());
+        uniformLocations[uniformName] = loc;
+
+        // Array uniforms report as "thing[0]", so store the bare name as well and callers
+        // can ask for either spelling.
+        const std::size_t bracket = uniformName.find('[');
+        if (bracket != std::string::npos) {
+            uniformLocations[uniformName.substr(0, bracket)] = loc;
+        }
+    }
+}
+
+GLint Shader::location(const std::string& name) const {
+    const auto it = uniformLocations.find(name);
+    return it != uniformLocations.end() ? it->second : -1;
 }
 
 void Shader::use() {
@@ -89,32 +129,32 @@ void Shader::use() {
 }
 
 void Shader::setInt(const std::string &name, int value) const {
-    glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
+    glUniform1i(location(name), value);
 }
 
 
 void Shader::setFloat(const std::string &name, float value) const {
-    glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
+    glUniform1f(location(name), value);
 }
 
 void Shader::setMat4(const std::string &name, const glm::mat4 &value) const {
-    glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
+    glUniformMatrix4fv(location(name), 1, GL_FALSE, glm::value_ptr(value));
 }
 
 void Shader::setMat3(const std::string &name, const glm::mat3 &value) const {
-    glUniformMatrix3fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
+    glUniformMatrix3fv(location(name), 1, GL_FALSE, glm::value_ptr(value));
 }
 
 void Shader::setVec3(const std::string &name, glm::vec3 value) const {
-    glUniform3f(glGetUniformLocation(ID, name.c_str()), value[0], value[1], value[2]);
+    glUniform3f(location(name), value[0], value[1], value[2]);
 }
 
 void Shader::setVec4(const std::string &name, glm::vec4 value) const {
-    glUniform4f(glGetUniformLocation(ID, name.c_str()), value[0], value[1], value[2], value[3]);
+    glUniform4f(location(name), value[0], value[1], value[2], value[3]);
 }
 
 void Shader::setBool(const std::string &name, bool value) const {
-    glUniform1i(glGetUniformLocation(ID, name.c_str()), (int) value);
+    glUniform1i(location(name), (int) value);
 }
 
 void Shader::checkCompileErrors(unsigned int shader, std::string type) {

@@ -3,6 +3,7 @@
 //
 
 #include "Chunk.h"
+#include <algorithm>
 #include <cstring>
 #include "World.h"
 
@@ -56,6 +57,11 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
     chunkBlocks[x][y][z] = type;
     if (type == BlockType::Water) {
         hasWater = true;
+        waterMinY = std::min(waterMinY, y);
+        waterMaxY = std::max(waterMaxY, y);
+    } else if (type != BlockType::Air) {
+        solidMinY = std::min(solidMinY, y);
+        solidMaxY = std::max(solidMaxY, y);
     }
     chunkDirty = true;
 }
@@ -115,6 +121,16 @@ void Chunk::generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* wo
 
             // anything near the waterline turns to sand.
             const bool shore = terrainHeight <= SEA_LEVEL + BEACH_HEIGHT;
+
+            // Per column rather than per block: the bands follow straight from the height.
+            if (terrainHeight > 0) {
+                solidMinY = 0;
+                solidMaxY = std::max(solidMaxY, std::min(terrainHeight, HEIGHT) - 1);
+            }
+            if (terrainHeight < SEA_LEVEL) {
+                waterMinY = std::min(waterMinY, std::max(terrainHeight, 0));
+                waterMaxY = std::max(waterMaxY, SEA_LEVEL - 1);
+            }
 
             for (int y = 0; y < HEIGHT; y++) {
                 if (y < terrainHeight - surfaceDepth - subSurfaceDepth) {
@@ -266,20 +282,37 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
     BlockFace positiveFace = static_cast<BlockFace>(axis * 2);
     BlockFace negativeFace = static_cast<BlockFace>(axis * 2 + 1);
 
+    // Full extent on X and Z, but only the occupied band on Y. Terrain tops out around a
+    // quarter of the height and water is thinner still, so sweeping all 256 levels spends
+    // most of its time on guaranteed-empty space.
+    int lo[3] = {0, 0, 0};
+    int hi[3] = {SIZE - 1, HEIGHT - 1, SIZE - 1};
+    if (pass == MeshPass::Water) {
+        if (waterMaxY < waterMinY) return;
+        lo[1] = waterMinY;
+        hi[1] = waterMaxY;
+    } else {
+        if (solidMaxY < solidMinY) return;
+        lo[1] = solidMinY;
+        hi[1] = solidMaxY;
+    }
+
     // For each slice along the axis
-    for (x[axis] = -1; x[axis] < chunkSize[axis]; ) {
+    for (x[axis] = lo[axis] - 1; x[axis] <= hi[axis]; ) {
         // Build mask for this slice
         struct MaskEntry {
             BlockType blockType;
             BlockFace face;
         };
 
+        // Indexed explicitly by (v, u) with the full stride rather than by a running
+        // counter, so the clamped band addresses the same slots it always did. Entries
+        // outside the band are never written and never read.
         MaskEntry mask[SIZE * HEIGHT];
-        int n = 0;
 
         // Scan the perpendicular plane
-        for (x[v] = 0; x[v] < chunkSize[v]; ++x[v]) {
-            for (x[u] = 0; x[u] < chunkSize[u]; ++x[u]) {
+        for (x[v] = lo[v]; x[v] <= hi[v]; ++x[v]) {
+            for (x[u] = lo[u]; x[u] <= hi[u]; ++x[u]) {
                 // Get blocks on both sides of the current slice
                 BlockType blockCurrent = (x[axis] >= 0) ? getBlock(x[0], x[1], x[2]) : BlockType::Air;
                 BlockType blockNext = (x[axis] < chunkSize[axis] - 1) ?
@@ -308,43 +341,50 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
                     blockNext = BlockType::Air;
                 }
 
+                // A chunk emits only faces of blocks it owns. The block across a seam belongs
+                // to the neighbour, which emits that face from its own side -- without this
+                // every seam face was built twice, once into each chunk's mesh.
+                const bool currentIsOurs = (x[axis] >= 0);
+                const bool nextIsOurs = (x[axis] < chunkSize[axis] - 1);
+
                 // Water/water and solid/solid both fall out of the != test, so no interior
                 // faces reach the blend and the sea cannot stack into opacity.
-                bool drawCurrent = blockInPass(blockCurrent, pass) && blockCurrent != blockNext &&!isBlockOpaque(blockNext);
-                bool drawNext = blockInPass(blockNext, pass) && blockNext != blockCurrent &&!isBlockOpaque(blockCurrent);
+                bool drawCurrent = currentIsOurs && blockInPass(blockCurrent, pass) && blockCurrent != blockNext &&!isBlockOpaque(blockNext);
+                bool drawNext = nextIsOurs && blockInPass(blockNext, pass) && blockNext != blockCurrent &&!isBlockOpaque(blockCurrent);
 
+                MaskEntry& slot = mask[x[v] * chunkSize[u] + x[u]];
                 if (drawCurrent) {
                     // Current block facing +axis
-                    mask[n++] = {blockCurrent, positiveFace};
+                    slot = {blockCurrent, positiveFace};
                 } else if (drawNext) {
                     // Next block facing -axis
-                    mask[n++] = {blockNext, negativeFace};
+                    slot = {blockNext, negativeFace};
                 } else {
-                    mask[n++] = {BlockType::Air, BlockFace::Top};
+                    slot = {BlockType::Air, BlockFace::Top};
                 }
             }
         }
 
         ++x[axis];
-        n = 0;
 
         // Generate mesh from mask using greedy meshing
-        for (int j = 0; j < chunkSize[v]; ++j) {
-            for (int i = 0; i < chunkSize[u]; ) {
+        for (int j = lo[v]; j <= hi[v]; ++j) {
+            for (int i = lo[u]; i <= hi[u]; ) {
+                const int n = j * chunkSize[u] + i;
                 if (mask[n].blockType != BlockType::Air) {
                     BlockType currentBlock = mask[n].blockType;
                     BlockFace currentFace = mask[n].face;
 
                     // Compute width - merge quads with same block type AND face
                     int w;
-                    for (w = 1; i + w < chunkSize[u] &&
+                    for (w = 1; i + w <= hi[u] &&
                          mask[n + w].blockType == currentBlock &&
                          mask[n + w].face == currentFace; ++w) {}
 
                     // Compute height
                     bool done = false;
                     int h;
-                    for (h = 1; j + h < chunkSize[v]; ++h) {
+                    for (h = 1; j + h <= hi[v]; ++h) {
                         for (int k = 0; k < w; ++k) {
                             if (mask[n + k + h * chunkSize[u]].blockType != currentBlock ||
                                 mask[n + k + h * chunkSize[u]].face != currentFace) {
@@ -374,10 +414,8 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
                     }
 
                     i += w;
-                    n += w;
                 } else {
                     ++i;
-                    ++n;
                 }
             }
         }
@@ -503,13 +541,6 @@ void Chunk::uploadTransparentMeshToGPU(const MeshData& meshData) {
 void Chunk::uploadWaterMeshToGPU(const MeshData& meshData) {
     PROFILE_SCOPE("Chunk::uploadWaterMeshToGPU");
     chunkWaterMesh.setData(meshData.vertices, meshData.indices);
-}
-
-bool Chunk::isBlockAt(int x, int y, int z) const {
-    if (x < 0 || x >= SIZE || y < 0 || y >= HEIGHT || z < 0 || z >= SIZE) {
-        return false; // Treat out-of-bounds as air
-    }
-    return isBlockOpaque(chunkBlocks[x][y][z]);
 }
 
 void Chunk::addFace(std::vector<Vertex> &vertices, std::vector<unsigned int> &indices,
