@@ -57,7 +57,7 @@ void InputManager::update() {
     lastMousePosition = mousePosition;
 
     if (uiCapturesMouse) {
-        scrollDelta = 0.0f; // scrolling an ImGui list should not also zoom the camera
+        scrollDelta = 0.0f; // scrolling an ImGui list should not also cycle the hotbar
     }
 }
 
@@ -328,6 +328,18 @@ void InputManager::setupDefaultBindings() {
     bindAction(GameAction::PrimaryAction, InputBinding(GLFW_MOUSE_BUTTON_LEFT));
     bindAction(GameAction::SecondaryAction, InputBinding(GLFW_MOUSE_BUTTON_RIGHT));
     bindAction(GameAction::TertiaryAction, InputBinding(GLFW_MOUSE_BUTTON_MIDDLE));
+
+    // Hotbar 1..9 then 0 for the tenth slot
+    bindAction(GameAction::HotbarSlot1, InputBinding(GLFW_KEY_1));
+    bindAction(GameAction::HotbarSlot2, InputBinding(GLFW_KEY_2));
+    bindAction(GameAction::HotbarSlot3, InputBinding(GLFW_KEY_3));
+    bindAction(GameAction::HotbarSlot4, InputBinding(GLFW_KEY_4));
+    bindAction(GameAction::HotbarSlot5, InputBinding(GLFW_KEY_5));
+    bindAction(GameAction::HotbarSlot6, InputBinding(GLFW_KEY_6));
+    bindAction(GameAction::HotbarSlot7, InputBinding(GLFW_KEY_7));
+    bindAction(GameAction::HotbarSlot8, InputBinding(GLFW_KEY_8));
+    bindAction(GameAction::HotbarSlot9, InputBinding(GLFW_KEY_9));
+    bindAction(GameAction::HotbarSlot10, InputBinding(GLFW_KEY_0));
 
     // UI
     bindAction(GameAction::ToggleHitBox, InputBinding(GLFW_KEY_F3));

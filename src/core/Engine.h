@@ -21,6 +21,7 @@ class ImGUIManager;
 
 class ChunkRenderer;
 class HighlightBox;
+class HotbarRenderer;
 class HUDRenderer;
 class Player;
 class PlayerController;
@@ -82,6 +83,7 @@ private:
     std::unique_ptr<Window> window;
     std::unique_ptr<SoundManager> soundManager;
     std::unique_ptr<HUDRenderer> hudRenderer;
+    std::unique_ptr<HotbarRenderer> hotbarRenderer;
     std::unique_ptr<Skybox> skybox;
     std::unique_ptr<SkyBodyRenderer> skyBodyRenderer;
     std::unique_ptr<ChunkRenderer> chunkRenderer;
@@ -92,13 +94,23 @@ private:
 #endif
     std::unique_ptr<HighlightBox> highlightBox;
 
-    // break sounds per material
-    std::unordered_map<BlockType, std::vector<unsigned int>> breakSounds;
-    std::vector<unsigned int> defaultBreakSounds;
+    // samples per material, falling back to one shared set
+    struct BlockSoundBank {
+        std::unordered_map<BlockType, std::vector<unsigned int>> byBlock;
+        std::vector<unsigned int> fallback;
+
+        const std::vector<unsigned int>& variantsFor(BlockType type) const {
+            const auto it = byBlock.find(type);
+            return it != byBlock.end() ? it->second : fallback;
+        }
+    };
+
+    BlockSoundBank breakSounds;
+    BlockSoundBank placeSounds;
     std::mt19937 soundRng{std::random_device{}()};
 
     void loadBlockSounds();
-    void playBreakSound(BlockType type, const glm::ivec3& pos);
+    void playBlockSound(const BlockSoundBank& bank, BlockType type, const glm::ivec3& pos);
 
     void onFramebufferResize(int width, int height);
 #ifndef __EMSCRIPTEN__

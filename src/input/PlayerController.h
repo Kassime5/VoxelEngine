@@ -26,6 +26,7 @@ private:
     void processMovementInput(float deltaTime);
     void processCameraInput(float deltaTime);
     void processInteractionInput();
+    void processHotbarInput();
     void processUIInput();
     void processDebugInput();
 

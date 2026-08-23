@@ -11,6 +11,7 @@
 #include "src/world/World.h"
 #include "src/world/Block.h"
 #include "src/utils/AABB.h"
+#include "src/game/Hotbar.h"
 
 class Player {
 public:
@@ -27,6 +28,9 @@ public:
 
     Camera& getCamera() { return camera; }
     const Camera& getCamera() const { return camera; }
+
+    Hotbar& getHotbar() { return hotbar; }
+    const Hotbar& getHotbar() const { return hotbar; }
 
     glm::vec3 getPosition() const { return position; }
     glm::vec3 getVelocity() const { return velocity; }
@@ -61,6 +65,7 @@ private:
     static constexpr float SPRINT_MULTIPLIER = 2.0f;
 
     Camera camera;
+    Hotbar hotbar;
 
     // Collision
     void applyGravity(float deltaTime);

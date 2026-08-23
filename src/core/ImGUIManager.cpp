@@ -9,6 +9,7 @@
 #include "src/core/GL.h"
 
 #include "src/game/Player.h"
+#include "src/input/InputManager.h"
 
 
 ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
@@ -23,6 +24,14 @@ ImGUIManager::~ImGUIManager() {}
 
 void ImGUIManager::drawImGUIElements(float deltaTime)
 {
+    // make sure ImGUI cannot be interacted with
+    ImGuiIO& io = ImGui::GetIO();
+    if (InputManager::getInstance().isCursorVisible()) {
+        io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+    } else {
+        io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+    }
+
     // ImGUI Rendering
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -114,4 +123,4 @@ std::string ImGUIManager::formatNumber(int number) {
     return str;
 }
 
-#endif // !__EMSCRIPTEN__
+#endif

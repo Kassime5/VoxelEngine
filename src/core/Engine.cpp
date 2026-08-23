@@ -29,6 +29,7 @@
 #include "src/core/Window.h"
 #include "src/debug/RenderStats.h"
 #include "src/game/HighlightBox.h"
+#include "src/game/HotbarRenderer.h"
 #include "src/game/HUDRenderer.h"
 #include "src/game/Player.h"
 #include "src/game/SoundManager.h"
@@ -125,6 +126,7 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 #endif
 
     hudRenderer = std::make_unique<HUDRenderer>(framebufferWidth, framebufferHeight);
+    hotbarRenderer = std::make_unique<HotbarRenderer>();
     skybox = std::make_unique<Skybox>();
     skyBodyRenderer = std::make_unique<SkyBodyRenderer>();
 
@@ -143,8 +145,11 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
     world->setRenderDistance(renderDistance);
 
     world->setBlockChangeCallback([this](const glm::ivec3& pos, BlockType from, BlockType to) {
+        // Simple way to check if it's destroyed or placed
         if (to == BlockType::Air) {
-            playBreakSound(from, pos);
+            playBlockSound(breakSounds, from, pos);
+        } else {
+            playBlockSound(placeSounds, to, pos);
         }
     });
 
@@ -229,6 +234,7 @@ void Engine::step() {
     skyBodyRenderer->draw(view, projection, sun);
 
     hudRenderer->drawCrosshair();
+    hotbarRenderer->draw(*hudRenderer, player->getHotbar(), chunkRenderer->getTextureAtlas());
 
 #ifndef __EMSCRIPTEN__
     if (showDebugUI) {
@@ -294,21 +300,27 @@ void Engine::shutdownImGui() {
     imguiInitialised = false;
 }
 
-#endif // !__EMSCRIPTEN__
+#endif
 
 void Engine::loadBlockSounds() {
-    for (int i = 0; i < 5; ++i) {
-        const std::string path = "assets/sfx/player_hit/player_hit_00" + std::to_string(i) + ".wav";
-        if (const ALuint buffer = soundManager->loadSound(path)) {
-            defaultBreakSounds.push_back(buffer);
+    auto loadSet = [this](const std::string& prefix, int count) {
+        std::vector<unsigned int> buffers;
+        for (int i = 0; i < count; ++i) {
+            const std::string path =
+                "assets/sfx/player_hit/" + prefix + "_00" + std::to_string(i) + ".wav";
+            if (const ALuint buffer = soundManager->loadSound(path)) {
+                buffers.push_back(buffer);
+            }
         }
-    }
+        return buffers;
+    };
+
+    breakSounds.fallback = loadSet("player_destroy", 5);
+    placeSounds.fallback = loadSet("player_place", 5);
 }
 
-void Engine::playBreakSound(BlockType type, const glm::ivec3& pos) {
-    const auto material = breakSounds.find(type);
-    const std::vector<unsigned int>& variants =
-        material != breakSounds.end() ? material->second : defaultBreakSounds;
+void Engine::playBlockSound(const BlockSoundBank& bank, BlockType type, const glm::ivec3& pos) {
+    const std::vector<unsigned int>& variants = bank.variantsFor(type);
 
     if (variants.empty()) {
         return;
@@ -404,4 +416,4 @@ EMSCRIPTEN_KEEPALIVE void voxel_new_world() {
 
 }
 
-#endif // __EMSCRIPTEN__
+#endif

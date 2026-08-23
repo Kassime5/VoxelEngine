@@ -36,6 +36,7 @@ public:
     void bind(unsigned int slot = 0) const;
 
     bool isLoaded() const { return textureId != 0; }
+    unsigned int getTextureId() const { return textureId; }
 
     uint8_t getBlockFaceTileIndex(BlockType block, BlockFace face) const;
 

@@ -22,6 +22,7 @@ void PlayerController::processInput(float deltaTime) {
 
     processMovementInput(deltaTime);
     processCameraInput(deltaTime);
+    processHotbarInput();
     processInteractionInput();
     processDebugInput();
 }
@@ -69,11 +70,26 @@ void PlayerController::processCameraInput(float deltaTime) {
         if (glm::length(mouseDelta) > 0.0f) {
             player->getCamera().ProcessMouseMovement(mouseDelta.x, mouseDelta.y);
         }
+    }
+}
 
-        // Zoom
-        float scrollDelta = input.getScrollDelta();
-        if (scrollDelta != 0.0f) {
-            player->getCamera().ProcessMouseScroll(scrollDelta);
+void PlayerController::processHotbarInput() {
+    InputManager& input = InputManager::getInstance();
+
+    if (input.isCursorVisible()) return;
+
+    Hotbar& hotbar = player->getHotbar();
+
+    const float scroll = input.getScrollDelta();
+    if (scroll != 0.0f) {
+        // Scrolling up moves toward slot 1
+        hotbar.cycle(scroll > 0.0f ? -1 : 1);
+    }
+
+    for (int i = 0; i < Hotbar::SLOT_COUNT; ++i) {
+        const auto action = static_cast<GameAction>(static_cast<int>(GameAction::HotbarSlot1) + i);
+        if (input.isActionPressed(action)) {
+            hotbar.setSelectedIndex(i);
         }
     }
 }
@@ -94,17 +110,17 @@ void PlayerController::processInteractionInput() {
     }
 
     if (input.isActionPressed(GameAction::SecondaryAction)) {
-        if (target.hit) {
+        const BlockType held = player->getHotbar().getSelected();
+        if (target.hit && held != BlockType::Air) {
             glm::ivec3 placePos = target.hitPos - target.hitNormal;
-            world->setBlock(placePos.x, placePos.y, placePos.z, BlockType::Grass);
+            world->setBlock(placePos.x, placePos.y, placePos.z, held);
         }
     }
 
     if (input.isActionPressed(GameAction::TertiaryAction)) {
         if (target.hit) {
             BlockType targetBlock = world->getBlock(target.hitPos.x, target.hitPos.y, target.hitPos.z);
-            // TODO: Set this as the active block in inventory
-            std::cout << "Picked block type: " << (int)targetBlock << std::endl;
+            player->getHotbar().setSelected(targetBlock);
         }
     }
 }

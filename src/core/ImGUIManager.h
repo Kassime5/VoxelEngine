@@ -41,4 +41,4 @@ private:
 
 #endif //GLFWVOXEL_IMGUIMANAGER_H
 
-#endif // !__EMSCRIPTEN__
+#endif
