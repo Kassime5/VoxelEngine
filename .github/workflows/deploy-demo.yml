@@ -1,0 +1,65 @@
+name: Deploy demo
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.6
+          actions-cache-folder: emsdk-cache
+
+      - name: Configure
+        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build-web -j
+
+      - name: Stage the site
+        run: |
+          mkdir -p site
+          cp build-web/GLFWVoxel.js build-web/GLFWVoxel.wasm build-web/GLFWVoxel.data site/
+          cp build-web/GLFWVoxel.html site/index.html
+          ls -lh site
+
+      - name: Sanity-check the output
+        run: |
+          # A missing .data means --preload-file silently found nothing, which shows up as
+          # a black page rather than a build failure. Better to catch it here.
+          test -s site/GLFWVoxel.wasm
+          test -s site/GLFWVoxel.data
+          grep -q "GLFWVoxel.js" site/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -58,7 +58,7 @@ In the spirit of Minecraft and Cube World, built to learn how OpenGL and overall
 
 ## Building
 
-Requires CMake 4.1+ and a C++20 compiler. All dependencies are vendored in
+Requires CMake 3.20+ and a C++20 compiler. All dependencies are vendored in
 `thirdparty/`, so there is nothing to install first.
 
 ### Desktop
