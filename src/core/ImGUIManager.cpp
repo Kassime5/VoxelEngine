@@ -13,11 +13,12 @@
 
 
 ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
-                           DayCycle& _dayCycle) :
+                           DayCycle& _dayCycle, int& _fpsLimit) :
     world(_world), camera(_camera),
     player(_player), entityManager(*_world.getEntityManager()),
     dayCycle(_dayCycle),
-    renderDistance(_renderDistance)
+    renderDistance(_renderDistance),
+    fpsLimit(_fpsLimit)
 {}
 
 ImGUIManager::~ImGUIManager() {}
@@ -99,6 +100,14 @@ void ImGUIManager::drawImGUIElements(float deltaTime)
     ImGui::SeparatorText("Settings");
     if (ImGui::SliderInt("Render Distance", &renderDistance, 2, 32)) {
         world.setRenderDistance(renderDistance);
+    }
+
+    // Snaps to 0 below the useful range, which the engine reads as uncapped.
+    if (ImGui::SliderInt("FPS Limit", &fpsLimit, 0, 240,
+                         fpsLimit <= 0 ? "Unlimited" : "%d")) {
+        if (fpsLimit > 0 && fpsLimit < 10) {
+            fpsLimit = 0;
+        }
     }
 
 #ifndef __EMSCRIPTEN__

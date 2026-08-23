@@ -22,7 +22,7 @@ class ImGUIManager
 {
 public:
     ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
-                 DayCycle& _dayCycle);
+                 DayCycle& _dayCycle, int& _fpsLimit);
     ~ImGUIManager();
     void drawImGUIElements(float deltaTime);
 private:
@@ -34,6 +34,7 @@ private:
 
     bool wireframe = false;
     int& renderDistance;
+    int& fpsLimit;
 
     std::string formatNumber(int number);
 };

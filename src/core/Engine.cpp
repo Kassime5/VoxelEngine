@@ -8,11 +8,23 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <cstdio>
+#endif
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
 #endif
 
 #include <glm/glm.hpp>
@@ -43,6 +55,59 @@
 namespace {
     // Clamping max delta time for browser stuff
     constexpr float MAX_DELTA_TIME = 0.1f;
+
+#ifndef __EMSCRIPTEN__
+    constexpr std::chrono::microseconds FRAME_SPIN_MARGIN{600};
+
+#ifdef _WIN32
+    class HighResTimer {
+    public:
+        HighResTimer() {
+            handle = CreateWaitableTimerExW(nullptr, nullptr,
+                CREATE_WAITABLE_TIMER_MANUAL_RESET | CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                TIMER_ALL_ACCESS);
+            if (!handle) {
+                handle = CreateWaitableTimerExW(nullptr, nullptr,
+                    CREATE_WAITABLE_TIMER_MANUAL_RESET, TIMER_ALL_ACCESS);
+            }
+        }
+        ~HighResTimer() { if (handle) CloseHandle(handle); }
+
+        HighResTimer(const HighResTimer&) = delete;
+        HighResTimer& operator=(const HighResTimer&) = delete;
+
+        bool wait(std::chrono::nanoseconds duration) const {
+            if (!handle || duration <= std::chrono::nanoseconds::zero()) {
+                return false;
+            }
+            LARGE_INTEGER due;
+            // Negative means relative, in 100ns units.
+            due.QuadPart = -(duration.count() / 100);
+            if (!SetWaitableTimer(handle, &due, 0, nullptr, nullptr, FALSE)) {
+                return false;
+            }
+            return WaitForSingleObject(handle, INFINITE) == WAIT_OBJECT_0;
+        }
+
+    private:
+        HANDLE handle = nullptr;
+    };
+#endif
+
+    void idleUntil(std::chrono::steady_clock::time_point target) {
+        const auto now = std::chrono::steady_clock::now();
+        if (target <= now) {
+            return;
+        }
+#ifdef _WIN32
+        static const HighResTimer timer;
+        if (timer.wait(target - now)) {
+            return;
+        }
+#endif
+        std::this_thread::sleep_until(target);
+    }
+#endif
 
 #ifdef __EMSCRIPTEN__
     Engine* g_engine = nullptr;
@@ -158,7 +223,7 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 #ifndef __EMSCRIPTEN__
     initImGui();
     imGUIManager = std::make_unique<ImGUIManager>(*world, player->getCamera(), renderDistance,
-                                                  *player, dayCycle);
+                                                  *player, dayCycle, fpsLimit);
 #endif
 
     highlightBox = std::make_unique<HighlightBox>();
@@ -264,6 +329,13 @@ void Engine::step() {
 
     glfwSwapBuffers(*window);
     InputManager::getInstance().endFrame();
+
+#ifndef __EMSCRIPTEN__
+    // After the swap, so the wait is pure idle rather than time the GPU could have used.
+    // step() takes its delta at the top, so the sleep lands inside the next frame's delta
+    // and game time stays real.
+    limitFrameRate();
+#endif
 }
 
 void Engine::regenerateWorld() {
@@ -292,6 +364,47 @@ void Engine::run() {
     while (!shouldClose()) {
         step();
     }
+}
+
+#ifndef __EMSCRIPTEN__
+void Engine::limitFrameRate() {
+    using namespace std::chrono;
+
+    if (fpsLimit <= 0) {
+        // Reset, so re-enabling the limit does not try to catch up on the idle period.
+        nextFrameTime = steady_clock::time_point{};
+        return;
+    }
+
+    const auto period = duration_cast<steady_clock::duration>(duration<double>(1.0 / fpsLimit));
+    const auto now = steady_clock::now();
+
+    // Either the first limited frame or one that ran long enough to fall behind. Catching
+    // up would mean a burst of unpaced frames, so restart the cadence from here instead.
+    if (nextFrameTime == steady_clock::time_point{} || now > nextFrameTime + period) {
+        nextFrameTime = now;
+    }
+    nextFrameTime += period;
+
+    idleUntil(nextFrameTime - FRAME_SPIN_MARGIN);
+    while (steady_clock::now() < nextFrameTime) {
+        std::this_thread::yield();
+    }
+}
+#endif
+
+void Engine::setFpsLimit(int fps) {
+    fpsLimit = fps <= 0 ? 0 : std::clamp(fps, 10, 1000);
+
+#ifdef __EMSCRIPTEN__
+    // The browser owns the loop here, so the rate is a request rather than a sleep.
+    // RAF stays vsync-aligned; an arbitrary cap has to fall back to a timer.
+    if (fpsLimit <= 0) {
+        emscripten_set_main_loop_timing(EM_TIMING_RAF, 1);
+    } else {
+        emscripten_set_main_loop_timing(EM_TIMING_SETTIMEOUT, 1000 / fpsLimit);
+    }
+#endif
 }
 
 #ifndef __EMSCRIPTEN__
@@ -392,7 +505,8 @@ void Engine::publishWebStats() {
         "{\"fps\":%.0f,\"frameMs\":%.2f,\"drawCalls\":%d,\"triangles\":%d,"
         "\"chunksRendered\":%d,\"chunksLoaded\":%d,\"entities\":%d,"
         "\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"biome\":\"%s\",\"clock\":\"%s\","
-        "\"renderDistance\":%d,\"dayLength\":%.0f,\"timeOfDay\":%.4f,\"seed\":%u}",
+        "\"renderDistance\":%d,\"dayLength\":%.0f,\"timeOfDay\":%.4f,\"seed\":%u,"
+        "\"fpsLimit\":%d}",
         deltaTime > 0.0f ? 1.0f / deltaTime : 0.0f,
         deltaTime * 1000.0f,
         stats.getDrawCalls(), stats.getTriangles(),
@@ -402,7 +516,7 @@ void Engine::publishWebStats() {
         biome ? biome->getName().c_str() : "-",
         dayCycle.getClockString().c_str(),
         renderDistance, dayCycle.getDayLength(), dayCycle.getTimeOfDay(),
-        static_cast<unsigned int>(world->getSeed()));
+        static_cast<unsigned int>(world->getSeed()), fpsLimit);
 
     EM_ASM({
         if (window.voxelStats) {
@@ -416,6 +530,10 @@ extern "C" {
 
 EMSCRIPTEN_KEEPALIVE void voxel_set_render_distance(int distance) {
     if (g_engine) g_engine->setRenderDistance(distance);
+}
+
+EMSCRIPTEN_KEEPALIVE void voxel_set_fps_limit(int fps) {
+    if (g_engine) g_engine->setFpsLimit(fps);
 }
 
 EMSCRIPTEN_KEEPALIVE void voxel_set_time_of_day(float fraction) {

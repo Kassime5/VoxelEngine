@@ -8,6 +8,7 @@
 #include "src/world/Block.h"
 #include "src/world/DayCycle.h"
 
+#include <chrono>
 #include <memory>
 #include <random>
 #include <unordered_map>
@@ -50,6 +51,11 @@ public:
     void setRenderDistance(int distance);
     DayCycle& getDayCycle() { return dayCycle; }
 
+    // 0 is unlimited. Desktop paces itself by sleeping; the web build hands the rate to
+    // the browser, which owns the loop and must not be blocked.
+    void setFpsLimit(int fps);
+    int getFpsLimit() const { return fpsLimit; }
+
     // Rebuilds the world from a fresh seed and drops the player back at spawn
     void regenerateWorld();
 
@@ -66,6 +72,14 @@ private:
     bool vsync = false;
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
+
+    int fpsLimit = 60;
+#ifndef __EMSCRIPTEN__
+    // Absolute deadline rather than "sleep for the leftover", so a frame that runs long
+    // does not push every later frame back with it.
+    std::chrono::steady_clock::time_point nextFrameTime{};
+    void limitFrameRate();
+#endif
 
 #ifdef __EMSCRIPTEN__
     // ImGui is not compiled into the web build at all
