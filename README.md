@@ -4,8 +4,7 @@ A voxel engine written from scratch in C++20 and OpenGL — chunked world stream
 procedural terrain, greedy meshing, frustum culling, a day/night cycle and 3D positional
 audio. It runs natively on desktop and, compiled to WebAssembly, directly in a browser.
 
-In the spirit of Minecraft and Cube World, built to learn how the rendering side of that
-kind of world actually works.
+In the spirit of Minecraft and Cube World, built to learn how OpenGL and overall rendering works.
 
 ![The engine running](docs/screenshot.png)
 

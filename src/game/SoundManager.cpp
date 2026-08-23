@@ -10,21 +10,13 @@
 #include <fstream>
 #include <cstring>
 
-// WAV file header structure
-struct WAVHeader {
-    char riff[4];
-    int32_t fileSize;
-    char wave[4];
-    char fmt[4];
-    int32_t fmtSize;
+struct WAVFormat {
     int16_t audioFormat;
     int16_t numChannels;
     int32_t sampleRate;
     int32_t byteRate;
     int16_t blockAlign;
     int16_t bitsPerSample;
-    char data[4];
-    int32_t dataSize;
 };
 
 SoundManager::SoundManager(Player& _player)
@@ -95,32 +87,55 @@ bool SoundManager::loadWAV(const std::string& filepath, ALenum& format, ALvoid*&
         return false;
     }
 
-    WAVHeader header;
-    file.read(reinterpret_cast<char*>(&header), sizeof(WAVHeader));
+    char riff[4], wave[4];
+    int32_t fileSize;
+    file.read(riff, 4);
+    file.read(reinterpret_cast<char*>(&fileSize), 4);
+    file.read(wave, 4);
 
-    if (std::strncmp(header.riff, "RIFF", 4) != 0 ||
-        std::strncmp(header.wave, "WAVE", 4) != 0) {
+    if (std::strncmp(riff, "RIFF", 4) != 0 || std::strncmp(wave, "WAVE", 4) != 0) {
         std::cerr << "Not a valid WAV file: " << filepath << std::endl;
         return false;
     }
 
-    if (header.numChannels == 1) {
-        format = (header.bitsPerSample == 8) ? AL_FORMAT_MONO8 : AL_FORMAT_MONO16;
-    } else if (header.numChannels == 2) {
-        format = (header.bitsPerSample == 8) ? AL_FORMAT_STEREO8 : AL_FORMAT_STEREO16;
-    } else {
-        std::cerr << "Unsupported number of channels: " << header.numChannels << std::endl;
-        return false;
+    WAVFormat fmt{};
+    bool haveFormat = false;
+
+    char chunkId[4];
+    int32_t chunkSize;
+    while (file.read(chunkId, 4) && file.read(reinterpret_cast<char*>(&chunkSize), 4)) {
+        if (std::strncmp(chunkId, "fmt ", 4) == 0) {
+            file.read(reinterpret_cast<char*>(&fmt), sizeof(WAVFormat));
+            file.seekg(chunkSize - static_cast<int32_t>(sizeof(WAVFormat)), std::ios::cur);
+            haveFormat = true;
+        } else if (std::strncmp(chunkId, "data", 4) == 0) {
+            if (!haveFormat) {
+                std::cerr << "WAV data chunk precedes its format chunk: " << filepath << std::endl;
+                return false;
+            }
+
+            if (fmt.numChannels == 1) {
+                format = (fmt.bitsPerSample == 8) ? AL_FORMAT_MONO8 : AL_FORMAT_MONO16;
+            } else if (fmt.numChannels == 2) {
+                format = (fmt.bitsPerSample == 8) ? AL_FORMAT_STEREO8 : AL_FORMAT_STEREO16;
+            } else {
+                std::cerr << "Unsupported number of channels: " << fmt.numChannels << std::endl;
+                return false;
+            }
+
+            size = chunkSize;
+            freq = fmt.sampleRate;
+            data = new char[size];
+            file.read(static_cast<char*>(data), size);
+            return true;
+        } else {
+            // Chunks are word-aligned, so an odd size carries a pad byte.
+            file.seekg(chunkSize + (chunkSize & 1), std::ios::cur);
+        }
     }
 
-    // Read audio data
-    size = header.dataSize;
-    freq = header.sampleRate;
-    data = new char[size];
-    file.read(static_cast<char*>(data), size);
-    file.close();
-
-    return true;
+    std::cerr << "WAV file has no data chunk: " << filepath << std::endl;
+    return false;
 }
 
 ALuint SoundManager::loadSound(const std::string& filepath) {

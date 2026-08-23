@@ -96,7 +96,9 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 
     // Sound stuff, TODO: move to a proper game manager
     ALuint ambianceBuffer = soundManager->loadSound("assets/music/MusicAmbianceMono.wav");
-    // soundManager->playSound3D(ambianceBuffer, 0.0f, 55.0f, 0.0f, true, 0.3f); // TODO uncomment and do actual work to it
+    // TODO improve this
+    soundManager->playSound3D(ambianceBuffer, 0.0f, 55.0f, 0.0f, true, 0.3f);
+    loadBlockSounds();
 
     glfwMakeContextCurrent(*window);
 #ifndef __EMSCRIPTEN__
@@ -139,6 +141,12 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 
     world = std::make_unique<World>(*player, chunkRenderer->getTextureAtlas());
     world->setRenderDistance(renderDistance);
+
+    world->setBlockChangeCallback([this](const glm::ivec3& pos, BlockType from, BlockType to) {
+        if (to == BlockType::Air) {
+            playBreakSound(from, pos);
+        }
+    });
 
     playerController = std::make_unique<PlayerController>(player.get(), world.get());
 
@@ -287,6 +295,39 @@ void Engine::shutdownImGui() {
 }
 
 #endif // !__EMSCRIPTEN__
+
+void Engine::loadBlockSounds() {
+    for (int i = 0; i < 5; ++i) {
+        const std::string path = "assets/sfx/player_hit/player_hit_00" + std::to_string(i) + ".wav";
+        if (const ALuint buffer = soundManager->loadSound(path)) {
+            defaultBreakSounds.push_back(buffer);
+        }
+    }
+}
+
+void Engine::playBreakSound(BlockType type, const glm::ivec3& pos) {
+    const auto material = breakSounds.find(type);
+    const std::vector<unsigned int>& variants =
+        material != breakSounds.end() ? material->second : defaultBreakSounds;
+
+    if (variants.empty()) {
+        return;
+    }
+
+    // vary the tune
+    std::uniform_int_distribution<std::size_t> pick(0, variants.size() - 1);
+    std::uniform_real_distribution<float> detune(0.92f, 1.08f);
+
+    // offset to the block's centre
+    const ALuint source = soundManager->playSound3D(
+        variants[pick(soundRng)],
+        static_cast<float>(pos.x) + 0.5f,
+        static_cast<float>(pos.y) + 0.5f,
+        static_cast<float>(pos.z) + 0.5f,
+        false, 0.8f);
+
+    soundManager->setSourcePitch(source, detune(soundRng));
+}
 
 void Engine::onFramebufferResize(int width, int height) {
     framebufferWidth = width;

@@ -329,7 +329,12 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
     }
 
     glm::ivec3 localPos = worldToLocalPos(worldX, worldY, worldZ);
+    const BlockType previous = chunk->getBlock(localPos.x, localPos.y, localPos.z);
     chunk->setBlock(localPos.x, localPos.y, localPos.z, type);
+
+    if (onBlockChange && previous != type) {
+        onBlockChange(glm::ivec3(worldX, worldY, worldZ), previous, type);
+    }
 
     if (chunk->getState() == ChunkState::Ready) {
         chunk->markDirty();

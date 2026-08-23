@@ -5,9 +5,13 @@
 #ifndef GLFWVOXEL_ENGINE_H
 #define GLFWVOXEL_ENGINE_H
 
+#include "src/world/Block.h"
 #include "src/world/DayCycle.h"
 
 #include <memory>
+#include <random>
+#include <unordered_map>
+#include <vector>
 
 struct GLFWwindow;
 
@@ -87,6 +91,14 @@ private:
     std::unique_ptr<ImGUIManager> imGUIManager;
 #endif
     std::unique_ptr<HighlightBox> highlightBox;
+
+    // break sounds per material
+    std::unordered_map<BlockType, std::vector<unsigned int>> breakSounds;
+    std::vector<unsigned int> defaultBreakSounds;
+    std::mt19937 soundRng{std::random_device{}()};
+
+    void loadBlockSounds();
+    void playBreakSound(BlockType type, const glm::ivec3& pos);
 
     void onFramebufferResize(int width, int height);
 #ifndef __EMSCRIPTEN__

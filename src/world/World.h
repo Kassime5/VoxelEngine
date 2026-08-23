@@ -9,6 +9,7 @@
 #include "Chunk.h"
 #include "../rendering/TextureAltas.h"
 #include <unordered_map>
+#include <functional>
 #include <memory>
 #include <vector>
 #include <queue>
@@ -63,12 +64,14 @@ public:
     BlockType getBlock(int worldX, int worldY, int worldZ);
     void setBlock(int worldX, int worldY, int worldZ, BlockType type);
 
+    // fires when setBlock is actually committed
+    using BlockChangeCallback = std::function<void(const glm::ivec3& pos, BlockType from, BlockType to)>;
+    void setBlockChangeCallback(BlockChangeCallback callback) { onBlockChange = std::move(callback); }
+
     Chunk* getChunk(const glm::ivec3& chunkPos);
     Chunk* getChunkAt(int worldX, int worldY, int worldZ);
 
-    // Invalidating the cached chunk position is the point: update() only reloads chunks
-    // when the player crosses a chunk boundary, so without this a new render distance did
-    // nothing at all until they happened to walk into the next chunk.
+    // Invalidating the cached chunk position to trigger a chunk reload
     void setRenderDistance(int distance) {
         if (distance == renderDistance) {
             return;
@@ -130,9 +133,6 @@ private:
     bool processOneMeshBuildTask();
     void pumpChunkWork(std::chrono::microseconds budget);
 
-    // Noise. Not const: regenerate() reseeds them in place rather than rebuilding the
-    // World, which would dangle the World* and World& that PlayerController and the debug
-    // UI hold onto.
     siv::PerlinNoise::seed_type seed;
     siv::PerlinNoise perlinNoise;
     std::unique_ptr<WorleyBiome> worleyBiome;
@@ -145,6 +145,8 @@ private:
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
 
     EntityManager entityManager;
+
+    BlockChangeCallback onBlockChange;
 };
 
 #endif //GLFWVOXEL_WORLD_H
