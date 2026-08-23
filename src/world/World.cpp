@@ -39,7 +39,11 @@ void World::regenerate(SeedType newSeed) {
         pendingEntitySpawns = {};
     }
 
-    m_chunks.clear();
+    {
+        std::unique_lock lock(chunksMutex);
+        m_chunks.clear();
+    }
+    chunkGraveyard.clear();
     entityManager.clear();
 
     seed = newSeed;
@@ -188,9 +192,11 @@ bool World::processOneMeshBuildTask() {
     const ChunkState currentState = task.chunk->getState();
     if (currentState == ChunkState::Generated || currentState == ChunkState::BuildingMesh) {
         task.chunk->setState(ChunkState::BuildingMesh);
-        task.chunk->buildMeshData(task.meshData, &textureAtlas, this);
+
+        const ChunkNeighbourhood neighbours = snapshotNeighbourhood(chunkPos);
+        task.chunk->buildMeshData(task.meshData, &textureAtlas, neighbours);
         task.chunk->buildTransparentMeshData(task.transparentMeshData, &textureAtlas);
-        task.chunk->buildWaterMeshData(task.waterMeshData, &textureAtlas, this);
+        task.chunk->buildWaterMeshData(task.waterMeshData, &textureAtlas, neighbours);
 
         // Re-checked because the chunk can be unloaded while the mesh is being built.
         if (isChunkLoaded(chunkPos)) {
@@ -239,7 +245,14 @@ void World::pumpChunkWork(std::chrono::microseconds budget) {
     }
 }
 
-void World::queueRemesh(Chunk* chunk) {
+std::shared_ptr<Chunk> World::getChunkShared(const glm::ivec3& chunkPos) const {
+    std::shared_lock lock(chunksMutex);
+    auto it = m_chunks.find(chunkPos);
+    return it != m_chunks.end() ? it->second : nullptr;
+}
+
+// Takes the chunk by value: the queued task has to keep it alive until a worker gets to it.
+void World::queueRemesh(std::shared_ptr<Chunk> chunk) {
     // Anything not yet Ready is still in flight and will mesh against current data anyway.
     if (!chunk || chunk->getState() != ChunkState::Ready) {
         return;
@@ -249,20 +262,21 @@ void World::queueRemesh(Chunk* chunk) {
     chunk->setState(ChunkState::Generated);
     {
         std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
-        meshBuildQueue.push({chunk, MeshData(), MeshData(), MeshData()});
+        meshBuildQueue.push({std::move(chunk), MeshData(), MeshData(), MeshData()});
     }
     meshBuildQueueCV.notify_one();
 }
 
-void World::collectStaleNeighbours(const glm::ivec3& chunkPos, std::vector<Chunk*>& out) {
+void World::collectStaleNeighbours(const glm::ivec3& chunkPos,
+                                   std::vector<std::shared_ptr<Chunk>>& out) {
     // Chunks span the full world height, so only the four horizontal neighbours share a seam.
     const glm::ivec3 offsets[4] = {
         {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}
     };
 
     for (const glm::ivec3& offset : offsets) {
-        if (Chunk* neighbour = getChunk(chunkPos + offset)) {
-            out.push_back(neighbour);
+        if (auto neighbour = getChunkShared(chunkPos + offset)) {
+            out.push_back(std::move(neighbour));
         }
     }
 }
@@ -270,39 +284,42 @@ void World::collectStaleNeighbours(const glm::ivec3& chunkPos, std::vector<Chunk
 void World::processGPUUploadQueue(int maxPerFrame) {
     PROFILE_SCOPE("World::processGPUUploadQueue");
 
-    // Collected under the upload lock but requeued after it drops: taking the mesh queue
-    // lock while holding this one would be the only place that nests the two.
-    std::vector<Chunk*> staleNeighbours;
-
+    // Drained first, then processed with no queue lock held. The GL uploads below are slow
+    // enough to stall mesh workers trying to push, and the chunk lookups would otherwise
+    // nest chunksMutex inside this one -- the one ordering nothing else takes in reverse,
+    // which is exactly the kind of thing that stops being true later.
+    std::vector<ChunkMeshTask> batch;
     {
         std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
-
-        int processed = 0;
-        while (!gpuUploadQueue.empty() && processed < maxPerFrame) {
-            ChunkMeshTask& task = gpuUploadQueue.front();
-
-            glm::ivec3 chunkPos = task.chunk->getPosition();
-
-            if (isChunkLoaded(chunkPos) && task.chunk->getState() == ChunkState::MeshBuilt) {
-                task.chunk->uploadMeshToGPU(task.meshData);
-                task.chunk->uploadTransparentMeshToGPU(task.transparentMeshData);
-                task.chunk->uploadWaterMeshToGPU(task.waterMeshData);
-
-                // Only on a chunk's first arrival. Remeshing never re-notifies, which is
-                // what makes the cascade terminate instead of ringing between neighbours.
-                if (!task.chunk->hasNotifiedNeighbours()) {
-                    task.chunk->markNeighboursNotified();
-                    collectStaleNeighbours(chunkPos, staleNeighbours);
-                }
-            }
-
+        while (!gpuUploadQueue.empty() && static_cast<int>(batch.size()) < maxPerFrame) {
+            batch.push_back(std::move(gpuUploadQueue.front()));
             gpuUploadQueue.pop();
-            processed++;
         }
     }
 
-    for (Chunk* neighbour : staleNeighbours) {
-        queueRemesh(neighbour);
+    std::vector<std::shared_ptr<Chunk>> staleNeighbours;
+
+    for (ChunkMeshTask& task : batch) {
+        const glm::ivec3 chunkPos = task.chunk->getPosition();
+
+        if (!isChunkLoaded(chunkPos) || task.chunk->getState() != ChunkState::MeshBuilt) {
+            continue;
+        }
+
+        task.chunk->uploadMeshToGPU(task.meshData);
+        task.chunk->uploadTransparentMeshToGPU(task.transparentMeshData);
+        task.chunk->uploadWaterMeshToGPU(task.waterMeshData);
+
+        // Only on a chunk's first arrival. Remeshing never re-notifies, which is what
+        // makes the cascade terminate instead of ringing between neighbours.
+        if (!task.chunk->hasNotifiedNeighbours()) {
+            task.chunk->markNeighboursNotified();
+            collectStaleNeighbours(chunkPos, staleNeighbours);
+        }
+    }
+
+    for (auto& neighbour : staleNeighbours) {
+        queueRemesh(std::move(neighbour));
     }
 }
 
@@ -333,6 +350,9 @@ void World::update(const glm::vec3& cameraPosition) {
         processGPUUploadQueue(2);
     }
 
+    // Main thread, so the GL deletes in ~Chunk have a context.
+    reapUnloadedChunks();
+
     {
         PROFILE_SCOPE("World::update - entity spawns");
         processPendingEntitySpawns(4);
@@ -340,10 +360,18 @@ void World::update(const glm::vec3& cameraPosition) {
 }
 
 BlockType World::getBlock(int worldX, int worldY, int worldZ) {
-    glm::ivec3 chunkPos = worldToChunkPos(worldX, worldY, worldZ);
-    Chunk* chunk = getChunk(chunkPos);
-    if (!chunk)
-        return BlockType::Air;
+    const glm::ivec3 chunkPos = worldToChunkPos(worldX, worldY, worldZ);
+
+    // The shared_ptr outlives the lock, so the chunk cannot be unloaded out from under
+    // the read that follows.
+    std::shared_ptr<Chunk> chunk;
+    {
+        std::shared_lock lock(chunksMutex);
+        auto it = m_chunks.find(chunkPos);
+        if (it == m_chunks.end())
+            return BlockType::Air;
+        chunk = it->second;
+    }
 
     glm::ivec3 localPos = worldToLocalPos(worldX, worldY, worldZ);
     return chunk->getBlock(localPos.x, localPos.y, localPos.z);
@@ -352,7 +380,7 @@ BlockType World::getBlock(int worldX, int worldY, int worldZ) {
 void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
     glm::ivec3 chunkPos = worldToChunkPos(worldX, worldY, worldZ);
 
-    Chunk* chunk = getChunk(chunkPos);
+    std::shared_ptr<Chunk> chunk = getChunkShared(chunkPos);
     if (!chunk) return;
 
     // Only check occupation when placing blocks
@@ -387,19 +415,43 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
     // An edit on a seam changes what the neighbour should draw there, so its mesh is stale
     // too. A corner block touches two of them.
     if (localPos.x == 0) {
-        queueRemesh(getChunk(chunkPos + glm::ivec3(-1, 0, 0)));
+        queueRemesh(getChunkShared(chunkPos + glm::ivec3(-1, 0, 0)));
     } else if (localPos.x == Chunk::SIZE - 1) {
-        queueRemesh(getChunk(chunkPos + glm::ivec3(1, 0, 0)));
+        queueRemesh(getChunkShared(chunkPos + glm::ivec3(1, 0, 0)));
     }
     if (localPos.z == 0) {
-        queueRemesh(getChunk(chunkPos + glm::ivec3(0, 0, -1)));
+        queueRemesh(getChunkShared(chunkPos + glm::ivec3(0, 0, -1)));
     } else if (localPos.z == Chunk::SIZE - 1) {
-        queueRemesh(getChunk(chunkPos + glm::ivec3(0, 0, 1)));
+        queueRemesh(getChunkShared(chunkPos + glm::ivec3(0, 0, 1)));
     }
 }
 Chunk* World::getChunk(const glm::ivec3& chunkPos) {
+    std::shared_lock lock(chunksMutex);
     auto it = m_chunks.find(chunkPos);
     return (it != m_chunks.end()) ? it->second.get() : nullptr;
+}
+
+ChunkNeighbourhood World::snapshotNeighbourhood(const glm::ivec3& chunkPos) const {
+    ChunkNeighbourhood snapshot;
+    snapshot.centre = chunkPos;
+
+    // One lock for the whole snapshot rather than one per boundary voxel, which is what
+    // meshing would otherwise cost -- roughly a hundred thousand lookups per chunk.
+    std::shared_lock lock(chunksMutex);
+
+    auto pin = [this](const glm::ivec3& pos) -> std::shared_ptr<Chunk> {
+        auto it = m_chunks.find(pos);
+        if (it == m_chunks.end() || it->second->getState() < ChunkState::Generated) {
+            return nullptr;
+        }
+        return it->second;
+    };
+
+    snapshot.negX = pin(chunkPos + glm::ivec3(-1, 0, 0));
+    snapshot.posX = pin(chunkPos + glm::ivec3(1, 0, 0));
+    snapshot.negZ = pin(chunkPos + glm::ivec3(0, 0, -1));
+    snapshot.posZ = pin(chunkPos + glm::ivec3(0, 0, 1));
+    return snapshot;
 }
 
 Chunk* World::getChunkAt(int worldX, int worldY, int worldZ) {
@@ -408,8 +460,10 @@ Chunk* World::getChunkAt(int worldX, int worldY, int worldZ) {
 }
 
 bool World::hasTerrainAt(int worldX, int worldZ) {
-    const Chunk* chunk = getChunk(worldToChunkPos(worldX, 0, worldZ));
-    return chunk != nullptr && chunk->getState() >= ChunkState::Generated;
+    const glm::ivec3 chunkPos = worldToChunkPos(worldX, 0, worldZ);
+    std::shared_lock lock(chunksMutex);
+    auto it = m_chunks.find(chunkPos);
+    return it != m_chunks.end() && it->second->getState() >= ChunkState::Generated;
 }
 
 glm::ivec3 World::worldToChunkPos(int worldX, int worldY, int worldZ) const {
@@ -439,11 +493,11 @@ void World::loadChunksAroundPosition(const glm::ivec3& centerChunkPos) {
 
             glm::ivec3 chunkPos = centerChunkPos + glm::ivec3(x, 0, z);
 
-            if (!isChunkLoaded(chunkPos)) {
-                auto chunk = std::make_unique<Chunk>(chunkPos);
-                Chunk* chunkPtr = chunk.get();
-                m_chunks[chunkPos] = std::move(chunk);
-                toLoad.push_back({chunkPos, chunkPtr});
+            std::unique_lock lock(chunksMutex);
+            if (m_chunks.find(chunkPos) == m_chunks.end()) {
+                auto chunk = std::make_shared<Chunk>(chunkPos);
+                m_chunks[chunkPos] = chunk;
+                toLoad.push_back({chunkPos, std::move(chunk)});
             }
         }
     }
@@ -469,6 +523,8 @@ void World::loadChunksAroundPosition(const glm::ivec3& centerChunkPos) {
 void World::unloadDistantChunks(const glm::ivec3& centerChunkPos) {
     std::vector<glm::ivec3> chunksToUnload;
 
+    std::unique_lock lock(chunksMutex);
+
     for (auto& pair : m_chunks) {
         const glm::ivec3& chunkPos = pair.first;
 
@@ -487,12 +543,30 @@ void World::unloadDistantChunks(const glm::ivec3& centerChunkPos) {
         }
     }
 
+    // Parked rather than dropped. A Chunk owns GL buffers and its destructor deletes them,
+    // so it must die on the thread holding the context -- but a worker can be the last one
+    // holding it (a neighbour snapshot pins chunks that then drift out of range). Keeping a
+    // reference here guarantees the final release happens in reapUnloadedChunks instead.
     for (const glm::ivec3& pos : chunksToUnload) {
-        m_chunks.erase(pos);
+        auto it = m_chunks.find(pos);
+        if (it != m_chunks.end()) {
+            chunkGraveyard.push_back(std::move(it->second));
+            m_chunks.erase(it);
+        }
     }
 }
 
+void World::reapUnloadedChunks() {
+    // use_count() == 1 means only the graveyard still refers to it, and nothing can take a
+    // new reference now that it is out of the map. Anything else is still in a worker's
+    // hands, so it waits for a later frame.
+    std::erase_if(chunkGraveyard, [](const std::shared_ptr<Chunk>& chunk) {
+        return chunk.use_count() == 1;
+    });
+}
+
 bool World::isChunkLoaded(const glm::ivec3& chunkPos) const {
+    std::shared_lock lock(chunksMutex);
     return m_chunks.find(chunkPos) != m_chunks.end();
 }
 

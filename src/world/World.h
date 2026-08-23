@@ -17,6 +17,7 @@
 #include <climits>
 #include <thread>
 #include <mutex>
+#include <shared_mutex>
 #include <condition_variable>
 #include <atomic>
 #include <glm/glm.hpp>
@@ -33,11 +34,11 @@ class Player;
 
 struct ChunkGenerationTask {
     glm::ivec3 chunkPos;
-    Chunk* chunk;
+    std::shared_ptr<Chunk> chunk;
 };
 
 struct ChunkMeshTask {
-    Chunk* chunk;
+    std::shared_ptr<Chunk> chunk;
     MeshData meshData;
     MeshData transparentMeshData;
     MeshData waterMeshData;
@@ -49,7 +50,7 @@ struct RaycastResult {
     glm::vec3 hitNormal;
 };
 
-using ChunkMap = std::unordered_map<glm::ivec3, std::unique_ptr<Chunk>, IVec3Hash>;
+using ChunkMap = std::unordered_map<glm::ivec3, std::shared_ptr<Chunk>, IVec3Hash>;
 
 class World {
 public:
@@ -72,6 +73,8 @@ public:
     Chunk* getChunk(const glm::ivec3& chunkPos);
     Chunk* getChunkAt(int worldX, int worldY, int worldZ);
 
+    ChunkNeighbourhood snapshotNeighbourhood(const glm::ivec3& chunkPos) const;
+
     // Invalidating the cached chunk position to trigger a chunk reload
     void setRenderDistance(int distance) {
         if (distance == renderDistance) {
@@ -81,7 +84,10 @@ public:
         lastCameraChunkPos = glm::ivec3(INT_MAX, INT_MAX, INT_MAX);
     }
     int getRenderDistance() const { return renderDistance; }
-    int getLoadedChunkCount() const { return m_chunks.size(); }
+    int getLoadedChunkCount() const {
+        std::shared_lock lock(chunksMutex);
+        return m_chunks.size();
+    }
 
     using SeedType = siv::PerlinNoise::seed_type;
 
@@ -101,6 +107,9 @@ private:
     Player& player;
 
     ChunkMap m_chunks;
+
+    mutable std::shared_mutex chunksMutex;
+
     const TextureAtlas& textureAtlas;
     int renderDistance;
     glm::ivec3 lastCameraChunkPos;
@@ -141,14 +150,19 @@ private:
     glm::ivec3 worldToChunkPos(int worldX, int worldY, int worldZ) const;
     glm::ivec3 worldToLocalPos(int worldX, int worldY, int worldZ) const;
 
+    std::vector<std::shared_ptr<Chunk>> chunkGraveyard;
+    void reapUnloadedChunks();
+
     void loadChunksAroundPosition(const glm::ivec3& centerChunkPos);
     void unloadDistantChunks(const glm::ivec3& centerChunkPos);
     bool isChunkLoaded(const glm::ivec3& chunkPos) const;
 
     // A chunk meshes its borders against whatever its neighbours held at the time, so those
     // borders go stale when a neighbour arrives or a seam block changes. Main thread only.
-    void queueRemesh(Chunk* chunk);
-    void collectStaleNeighbours(const glm::ivec3& chunkPos, std::vector<Chunk*>& out);
+    std::shared_ptr<Chunk> getChunkShared(const glm::ivec3& chunkPos) const;
+    void queueRemesh(std::shared_ptr<Chunk> chunk);
+    void collectStaleNeighbours(const glm::ivec3& chunkPos,
+                                std::vector<std::shared_ptr<Chunk>>& out);
 
     EntityManager entityManager;
 

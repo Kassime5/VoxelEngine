@@ -16,8 +16,11 @@
 #include "WorleyBiome.h"
 #include "PerlinNoise/PerlinNoise.hpp"
 
+#include <memory>
+
 class TextureAtlas;
 class World;
+struct ChunkNeighbourhood;
 
 enum class ChunkState {
     Empty,           // Just created
@@ -65,9 +68,9 @@ public:
     void generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
 
     // Regular mesh
-    void buildMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
-    void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas, World *world, int axis,
-                        MeshPass pass);
+    void buildMeshData(MeshData& meshData, const TextureAtlas* atlas, const ChunkNeighbourhood& neighbours);
+    void greedyMeshAxis(MeshData &meshData, const TextureAtlas *atlas,
+                        const ChunkNeighbourhood& neighbours, int axis, MeshPass pass);
     void uploadMeshToGPU(const MeshData& meshData);
     void draw() const;
 
@@ -78,7 +81,7 @@ public:
     bool isTransparentMeshEmpty() const { return chunkTransparentMesh.isEmpty(); }
 
     // Water mesh
-    void buildWaterMeshData(MeshData& meshData, const TextureAtlas* atlas, World* world);
+    void buildWaterMeshData(MeshData& meshData, const TextureAtlas* atlas, const ChunkNeighbourhood& neighbours);
     void uploadWaterMeshToGPU(const MeshData& meshData);
     void drawWater() const;
     bool isWaterMeshEmpty() const { return chunkWaterMesh.isEmpty(); }
@@ -120,7 +123,6 @@ private:
     void placeStructures(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
 
     bool isBlockAt(int x, int y, int z) const;
-    bool shouldRenderFace(int x, int y, int z, int nx, int ny, int nz, World *world) const;
 
     void addFace(std::vector<Vertex>& vertices, std::vector<unsigned int>& indices,
                  const glm::vec3& pos, int faceIndex, BlockType blockType,
@@ -132,6 +134,43 @@ private:
 
     void addCrossModel(MeshData& meshData, const glm::vec3& pos, BlockType blockType,
                   const TextureAtlas* atlas);
+};
+
+
+// The four chunks a mesh build can read across its seams, pinned for the length of that
+// build. Snapshotting them once keeps the map lock off the per-voxel path, and holding
+// them by shared_ptr stops an unload from freeing a neighbour mid-build.
+struct ChunkNeighbourhood {
+    glm::ivec3 centre{0};
+    std::shared_ptr<Chunk> negX, posX, negZ, posZ;
+
+    // Only ever asked about blocks one step outside the centre chunk. Anything else reads as Air.
+    BlockType getBlock(int worldX, int worldY, int worldZ) const {
+        if (worldY < 0 || worldY >= Chunk::HEIGHT) {
+            return BlockType::Air;
+        }
+
+        const int cx = worldX < 0 ? (worldX + 1) / Chunk::SIZE - 1 : worldX / Chunk::SIZE;
+        const int cz = worldZ < 0 ? (worldZ + 1) / Chunk::SIZE - 1 : worldZ / Chunk::SIZE;
+        const int dx = cx - centre.x;
+        const int dz = cz - centre.z;
+
+        const Chunk* chunk = nullptr;
+        if (dx == -1 && dz == 0)      chunk = negX.get();
+        else if (dx == 1 && dz == 0)  chunk = posX.get();
+        else if (dx == 0 && dz == -1) chunk = negZ.get();
+        else if (dx == 0 && dz == 1)  chunk = posZ.get();
+
+        if (!chunk) {
+            return BlockType::Air;
+        }
+
+        int localX = worldX % Chunk::SIZE;
+        int localZ = worldZ % Chunk::SIZE;
+        if (localX < 0) localX += Chunk::SIZE;
+        if (localZ < 0) localZ += Chunk::SIZE;
+        return chunk->getBlock(localX, worldY, localZ);
+    }
 };
 
 

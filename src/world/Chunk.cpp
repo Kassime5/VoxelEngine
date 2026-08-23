@@ -197,21 +197,23 @@ int Chunk::getTerrainHeight(int localX, int localZ) const {
     return 0;
 }
 
-void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas, World *world) {
+void Chunk::buildMeshData(MeshData& meshData, const TextureAtlas *atlas,
+                          const ChunkNeighbourhood& neighbours) {
     PROFILE_SCOPE("Chunk::buildMeshData");
 
     meshData.clear();
     meshData.vertices.reserve(SIZE * SIZE * 4);
     meshData.indices.reserve(SIZE * SIZE * 6);
 
-    greedyMeshAxis(meshData, atlas, world, 0, MeshPass::Opaque);
-    greedyMeshAxis(meshData, atlas, world, 1, MeshPass::Opaque);
-    greedyMeshAxis(meshData, atlas, world, 2, MeshPass::Opaque);
+    greedyMeshAxis(meshData, atlas, neighbours, 0, MeshPass::Opaque);
+    greedyMeshAxis(meshData, atlas, neighbours, 1, MeshPass::Opaque);
+    greedyMeshAxis(meshData, atlas, neighbours, 2, MeshPass::Opaque);
 
     chunkState.store(ChunkState::MeshBuilt);
 }
 
-void Chunk::buildWaterMeshData(MeshData& meshData, const TextureAtlas *atlas, World *world) {
+void Chunk::buildWaterMeshData(MeshData& meshData, const TextureAtlas *atlas,
+                               const ChunkNeighbourhood& neighbours) {
     PROFILE_SCOPE("Chunk::buildWaterMeshData");
 
     meshData.clear();
@@ -220,9 +222,9 @@ void Chunk::buildWaterMeshData(MeshData& meshData, const TextureAtlas *atlas, Wo
     meshData.vertices.reserve(SIZE * SIZE);
     meshData.indices.reserve(SIZE * SIZE * 2);
 
-    greedyMeshAxis(meshData, atlas, world, 0, MeshPass::Water);
-    greedyMeshAxis(meshData, atlas, world, 1, MeshPass::Water);
-    greedyMeshAxis(meshData, atlas, world, 2, MeshPass::Water);
+    greedyMeshAxis(meshData, atlas, neighbours, 0, MeshPass::Water);
+    greedyMeshAxis(meshData, atlas, neighbours, 1, MeshPass::Water);
+    greedyMeshAxis(meshData, atlas, neighbours, 2, MeshPass::Water);
 }
 
 void Chunk::buildTransparentMeshData(MeshData& meshData, const TextureAtlas *atlas) {
@@ -245,8 +247,8 @@ void Chunk::buildTransparentMeshData(MeshData& meshData, const TextureAtlas *atl
     }
 }
 
-void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World *world, int axis,
-                           MeshPass pass) {
+void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
+                           const ChunkNeighbourhood& neighbours, int axis, MeshPass pass) {
     // axis: 0=X, 1=Y, 2=Z
     // We'll scan along this axis and mesh the perpendicular plane
     int u = (axis + 1) % 3; // First perpendicular axis
@@ -284,21 +286,19 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas, World 
                     getBlock(x[0] + q[0], x[1] + q[1], x[2] + q[2]) : BlockType::Air;
 
                 // Check neighbor chunks if at boundary
-                if (world) {
-                    // Check at the far boundary
-                    if (x[axis] == chunkSize[axis] - 1) {
-                        int worldX = chunkPosition.x * SIZE + x[0] + q[0];
-                        int worldY = x[1] + q[1];
-                        int worldZ = chunkPosition.z * SIZE + x[2] + q[2];
-                        blockNext = world->getBlock(worldX, worldY, worldZ);
-                    }
-                    // Also check at the near boundary (when x[axis] == -1)
-                    else if (x[axis] == -1) {
-                        int worldX = chunkPosition.x * SIZE + x[0];
-                        int worldY = x[1];
-                        int worldZ = chunkPosition.z * SIZE + x[2];
-                        blockCurrent = world->getBlock(worldX, worldY, worldZ);
-                    }
+                // Check at the far boundary
+                if (x[axis] == chunkSize[axis] - 1) {
+                    int worldX = chunkPosition.x * SIZE + x[0] + q[0];
+                    int worldY = x[1] + q[1];
+                    int worldZ = chunkPosition.z * SIZE + x[2] + q[2];
+                    blockNext = neighbours.getBlock(worldX, worldY, worldZ);
+                }
+                // Also check at the near boundary (when x[axis] == -1)
+                else if (x[axis] == -1) {
+                    int worldX = chunkPosition.x * SIZE + x[0];
+                    int worldY = x[1];
+                    int worldZ = chunkPosition.z * SIZE + x[2];
+                    blockCurrent = neighbours.getBlock(worldX, worldY, worldZ);
                 }
 
                 if (getBlockRenderType(blockCurrent) == BlockRenderType::CrossModel) {
@@ -510,33 +510,6 @@ bool Chunk::isBlockAt(int x, int y, int z) const {
         return false; // Treat out-of-bounds as air
     }
     return isBlockOpaque(chunkBlocks[x][y][z]);
-}
-
-bool Chunk::shouldRenderFace(int x, int y, int z, int nx, int ny, int nz, World *world) const {
-    int neighborX = x + nx;
-    int neighborY = y + ny;
-    int neighborZ = z + nz;
-
-    // Never render the bottom of the map
-    if (neighborY == -1)
-        return false;
-
-    // Check if neighbor is within this chunk
-    if (neighborX >= 0 && neighborX < SIZE && neighborY >= 0 && neighborY < HEIGHT && neighborZ >= 0 && neighborZ <
-        SIZE) {
-        return !isBlockOpaque(chunkBlocks[neighborX][neighborY][neighborZ]);
-    }
-
-    // TODO: Currently doesn't work if the chunk is still generating
-    if (world) {
-        int worldX = chunkPosition.x * SIZE + neighborX;
-        int worldY = neighborY;
-        int worldZ = chunkPosition.z * SIZE + neighborZ;
-        BlockType neighborBlock = world->getBlock(worldX, worldY, worldZ);
-        return !isBlockOpaque(neighborBlock);
-    }
-
-    return true;
 }
 
 void Chunk::addFace(std::vector<Vertex> &vertices, std::vector<unsigned int> &indices,
