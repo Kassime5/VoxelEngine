@@ -67,7 +67,7 @@ private:
     static constexpr float SLOT_PX = 20.0f;
     static constexpr float HIGHLIGHT_PX = 22.0f;
     static constexpr float ICON_PX = 16.0f;
-    static constexpr float MARGIN_PX = 6.0f;
+    static constexpr float MARGIN_PX = 0.0f;
 
     static constexpr glm::vec4 SLOT_UV = hotbar_ui::uv(6.0f, 6.0f, SLOT_PX, SLOT_PX);
     static constexpr glm::vec4 HIGHLIGHT_UV = hotbar_ui::uv(37.0f, 5.0f, HIGHLIGHT_PX, HIGHLIGHT_PX);

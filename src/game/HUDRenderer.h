@@ -104,13 +104,14 @@ public:
     int getScreenHeight() const { return screenHeight; }
 
     // Whole numbers only: pixel art scaled by a fraction shimmers on its 1px borders
-    int getUIScale() const { return std::clamp(screenHeight / 360, 1, 6); }
+    int getUIScale() const { return std::clamp(screenHeight / 240, 1, 6); }
 
 private:
     struct SavedState {
         GLboolean depthTest;
         GLboolean cullFace;
         GLboolean depthMask;
+        GLboolean blend;
     };
 
     int screenWidth, screenHeight;
@@ -124,16 +125,20 @@ private:
         glGetBooleanv(GL_DEPTH_TEST, &saved.depthTest);
         glGetBooleanv(GL_CULL_FACE, &saved.cullFace);
         glGetBooleanv(GL_DEPTH_WRITEMASK, &saved.depthMask);
+        glGetBooleanv(GL_BLEND, &saved.blend);
 
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
         glDepthMask(GL_FALSE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         return saved;
     }
 
     void endHud(const SavedState& saved) const {
         if (saved.depthTest) glEnable(GL_DEPTH_TEST);
         if (saved.cullFace)  glEnable(GL_CULL_FACE);
+        if (!saved.blend)    glDisable(GL_BLEND);
         glDepthMask(saved.depthMask);
     }
 
