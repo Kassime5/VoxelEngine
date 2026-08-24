@@ -38,7 +38,7 @@ if(NOT EMSCRIPTEN)
     add_library(openal SHARED IMPORTED)
     set_target_properties(openal PROPERTIES
             IMPORTED_LOCATION "${OPENAL_DIR}/OpenAL32.dll"
-            IMPORTED_IMPLIB "${OPENAL_DIR}/OpenAL32.lib"
+            IMPORTED_IMPLIB "${OPENAL_DIR}/libOpenAL32.dll.a"
             INTERFACE_INCLUDE_DIRECTORIES "${OPENAL_DIR}"
     )
 endif()

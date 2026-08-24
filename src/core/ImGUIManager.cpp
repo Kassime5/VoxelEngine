@@ -23,8 +23,7 @@ ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance,
 
 ImGUIManager::~ImGUIManager() {}
 
-void ImGUIManager::drawImGUIElements(float deltaTime)
-{
+void ImGUIManager::drawImGUIElements(float deltaTime) {
     // make sure ImGUI cannot be interacted with
     ImGuiIO& io = ImGui::GetIO();
     if (InputManager::getInstance().isCursorVisible()) {
@@ -110,16 +109,11 @@ void ImGUIManager::drawImGUIElements(float deltaTime)
         }
     }
 
-#ifndef __EMSCRIPTEN__
-    // WebGL2 has no glPolygonMode, so the toggle is desktop-only
     ImGui::Checkbox("Wireframe", &wireframe);
     glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
-#endif
-
     ImGui::End();
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    // ---
 }
 
 std::string ImGUIManager::formatNumber(int number) {

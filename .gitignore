@@ -1,4 +1,8 @@
 # Build directories
 cmake-build-*/
 build/
+build-web/
 assets/imported
+
+# ImGui writes this next to the executable at runtime
+imgui.ini

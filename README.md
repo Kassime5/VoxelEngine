@@ -135,16 +135,31 @@ thirdparty/   vendored dependencies
 
 ## Third-party
 
-Vendored rather than fetched, so a clone builds without further setup:
-[GLFW](https://www.glfw.org/), [GLM](https://github.com/g-truc/glm),
-[glad](https://glad.dav1d.de/), [Dear ImGui](https://github.com/ocornut/imgui),
-[stb_image](https://github.com/nothings/stb),
-[PerlinNoise](https://github.com/Reputeless/PerlinNoise) 
-and [OpenAL](https://www.openal.org).
+Each keeps its own license:
+
+| Component | Version | License | Text |
+|---|---|---|---|
+| [GLFW](https://www.glfw.org/) | 3.4 | zlib/libpng | `thirdparty/glfw-3.4/LICENSE.md` |
+| [GLM](https://github.com/g-truc/glm) | 1.0.2 | Happy Bunny **or** MIT | `thirdparty/glm/copying.txt` |
+| [glad](https://glad.dav1d.de/) | 0.1.36 | MIT; Khronos specs Apache-2.0 / MIT | `thirdparty/glad/LICENSE` |
+| [Dear ImGui](https://github.com/ocornut/imgui) | 1.92.6 | MIT | `thirdparty/imgui/LICENSE.txt` |
+| [stb_image](https://github.com/nothings/stb) | — | MIT **or** public domain | end of `src/stb_image.h` |
+| [PerlinNoise](https://github.com/Reputeless/PerlinNoise) | — | MIT | `thirdparty/PerlinNoise/LICENSE` |
+| [OpenAL Soft](https://openal-soft.org/) | 1.25.2 | LGPL-2.1 | `thirdparty/AL/COPYING` |
+
+OpenAL Soft is dynamically linked as a drop-in replaceable `OpenAL32.dll`; its source is
+at [kcat/openal-soft](https://github.com/kcat/openal-soft). The bundled DLL also contains
+pffft (`thirdparty/AL/LICENSE-pffft`). The web build links Emscripten's own OpenAL
+implementation instead and bundles none of it.
 
 ## Credits
 
-Block textures and skybox are from [Kenney](https://kenney.nl/assets).
+Block textures, skybox and SFX are from [Kenney](https://kenney.nl/assets) (CC0).
+`assets/music/MusicAmbianceMono.wav` was made by me in [BeepBox](https://www.beepbox.co).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 
 ## Roadmap
