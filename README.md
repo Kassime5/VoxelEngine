@@ -8,7 +8,7 @@ In the spirit of Minecraft and Cube World, built to learn how OpenGL and overall
 
 ![The engine running](docs/screenshot.png)
 
-### [Play it in your browser](https://kassime5.github.io/voxel/)
+### [Play it in your browser](https://kassime5.github.io/GLFW-Voxel-Game/)
 
 ---
 
@@ -171,8 +171,6 @@ MIT — see [LICENSE](LICENSE).
 - Fix model orientation and floating offset
 
 ## References
-
-What I learned this from
 
 - [LearnOpenGL](https://learnopengl.com/)
 - [Vercidium](https://www.youtube.com/@Vercidium)
