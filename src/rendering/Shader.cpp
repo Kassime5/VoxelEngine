@@ -12,7 +12,8 @@ namespace {
         "#version 300 es\n"
         "precision highp float; precision highp int; "
         "precision highp sampler2D; precision highp samplerCube; "
-        "precision highp sampler2DArray; precision highp sampler2DShadow;\n";
+        "precision highp sampler2DArray; precision highp sampler2DShadow; "
+        "precision highp sampler2DArrayShadow;\n";
 #else
     constexpr const char* VERSION_HEADER = "#version 460 core\n";
 #endif
