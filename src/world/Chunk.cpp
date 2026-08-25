@@ -3,6 +3,7 @@
 //
 
 #include "Chunk.h"
+#include "src/debug/TestScene.h"
 #include <algorithm>
 #include <cstring>
 #include "World.h"
@@ -97,6 +98,14 @@ void ChunkBlockSink::set(int worldX, int worldY, int worldZ, BlockType type) {
 }
 
 void Chunk::generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {
+    // Fixed geometry
+    if (TestScene::enabled) {
+        generateTestSceneTerrain();
+        chunkDirty = true;
+        chunkState.store(ChunkState::Generated);
+        return;
+    }
+
     generateTerrain(perlinNoise, worleyBiome);
     decorateTerrain(perlinNoise, worleyBiome);
     // After decoration, so trunks overwrites grass e.g.
@@ -154,6 +163,62 @@ void Chunk::generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* wo
             }
         }
     }
+}
+
+// TODO: Make it more generic for future scenes ?
+void Chunk::generateTestSceneTerrain() {
+    using namespace TestScene;
+
+    const int originX = chunkPosition.x * SIZE;
+    const int originZ = chunkPosition.z * SIZE;
+
+    // Uniform stone, so banding is not competing with texture detail
+    for (int x = 0; x < SIZE; x++)
+        for (int z = 0; z < SIZE; z++)
+            for (int y = 0; y < HEIGHT; y++)
+                chunkBlocks[x][y][z] = y < GROUND_Y ? BlockType::Stone : BlockType::Air;
+
+    solidMinY = 0;
+    solidMaxY = GROUND_Y - 1;
+
+    // Props are addressed in world space and clipped to this chunk, so one straddling a
+    // chunk seam still comes out whole.
+    auto put = [&](int wx, int wy, int wz) {
+        const int lx = wx - originX;
+        const int lz = wz - originZ;
+        if (lx < 0 || lx >= SIZE || lz < 0 || lz >= SIZE) return;
+        if (wy < 0 || wy >= HEIGHT) return;
+        chunkBlocks[lx][wy][lz] = BlockType::Stone;
+        solidMaxY = std::max(solidMaxY, wy);
+    };
+
+    put(LONE_BLOCK_X, GROUND_Y, LONE_BLOCK_Z);
+
+    for (int z = WALL_Z0; z <= WALL_Z1; z++)
+        for (int y = GROUND_Y; y < WALL_TOP; y++)
+            put(WALL_X, y, z);
+
+    for (int x = CUBE_X0; x <= CUBE_X1; x++)
+        for (int z = CUBE_Z0; z <= CUBE_Z1; z++)
+            for (int y = GROUND_Y; y < CUBE_TOP; y++)
+                put(x, y, z);
+
+    for (int i = 0; i <= STAIR_Z1 - STAIR_Z0; i++)
+        for (int x = STAIR_X0; x < STAIR_X0 + 5; x++)
+            for (int y = GROUND_Y; y <= GROUND_Y + i; y++)
+                put(x, y, STAIR_Z0 + i);
+
+    for (int x = GRAZE_WALL_X0; x <= GRAZE_WALL_X1; x++)
+        for (int y = GROUND_Y; y < GRAZE_WALL_TOP; y++)
+            put(x, y, GRAZE_WALL_Z);
+
+    for (int y = GROUND_Y; y < SLAB_Y; y++) {
+        put(SLAB_X0, y, SLAB_Z0);
+        put(SLAB_X0, y, SLAB_Z1);
+    }
+    for (int x = SLAB_X0; x <= SLAB_X1; x++)
+        for (int z = SLAB_Z0; z <= SLAB_Z1; z++)
+            put(x, SLAB_Y, z);
 }
 
 void Chunk::decorateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome) {

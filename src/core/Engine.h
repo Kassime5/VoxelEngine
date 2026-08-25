@@ -26,6 +26,7 @@ class HotbarRenderer;
 class HUDRenderer;
 class Player;
 class PlayerController;
+class ShadowMap;
 class Skybox;
 class SkyBodyRenderer;
 class SoundManager;
@@ -101,6 +102,7 @@ private:
     std::unique_ptr<Skybox> skybox;
     std::unique_ptr<SkyBodyRenderer> skyBodyRenderer;
     std::unique_ptr<ChunkRenderer> chunkRenderer;
+    std::unique_ptr<ShadowMap> shadowMap;
     std::unique_ptr<World> world;
     std::unique_ptr<PlayerController> playerController;
 #ifndef __EMSCRIPTEN__

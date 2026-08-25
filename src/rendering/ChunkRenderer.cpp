@@ -9,6 +9,7 @@
 
 #include "Profiler.h"
 #include "ShaderManager.h"
+#include "ShadowMap.h"
 #include "src/debug/RenderStats.h"
 #include "Skybox.h"
 #include "src/world/Chunk.h"
@@ -19,6 +20,10 @@ ChunkRenderer::ChunkRenderer() {
     sm.addShader("terrain", "assets/shader/terrain/terrain.vs.glsl",
                  "assets/shader/terrain/terrain.fs.glsl");
     terrainShader = sm.getShader("terrain");
+
+    sm.addShader("shadow_depth", "assets/shader/shadow/depth.vs.glsl",
+                 "assets/shader/shadow/depth.fs.glsl");
+    depthShader = sm.getShader("shadow_depth");
 }
 
 bool ChunkRenderer::loadTextureAtlas(const char* atlasPath, int tilesPerRow) {
@@ -27,10 +32,10 @@ bool ChunkRenderer::loadTextureAtlas(const char* atlasPath, int tilesPerRow) {
 
 void ChunkRenderer::render(const World& world, const glm::mat4& projection, const glm::mat4& view,
                            const SunState& sun, const glm::vec3& viewPos, bool underwater,
-                           const Skybox& skybox) {
+                           const Skybox& skybox, const ShadowMap& shadowMap) {
     PROFILE_FUNCTION();
 
-    cullChunks(world, projection * view);
+    cullChunks(world, projection * view, visibleChunks);
 
     terrainShader->use();
     terrainShader->setInt("ourTexture", 0);
@@ -60,6 +65,21 @@ void ChunkRenderer::render(const World& world, const glm::mat4& projection, cons
     glActiveTexture(GL_TEXTURE0 + NIGHT_SKY_UNIT);
     glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.getNightTexture());
 
+    // Bound even when shadows are off
+    terrainShader->setInt("shadowMap", SHADOW_UNIT);
+    shadowMap.bindForRead(SHADOW_UNIT);
+
+    const int cascades = shadowMap.getCascadeCount();
+    terrainShader->setInt("shadowCascades", cascades);
+    terrainShader->setMat4Array("lightSpaceMatrix", shadowMap.getLightSpaceMatrices(), cascades);
+    terrainShader->setFloatArray("shadowSplit", shadowMap.getSplitDistances(), cascades);
+
+    terrainShader->setFloat("shadowStrength", shadowMap.getEffectiveStrength());
+    terrainShader->setFloat("shadowTexelUV", shadowMap.getTexelUV());
+    terrainShader->setFloat("shadowCascadeBlend", shadowMap.getCascadeBlend());
+    terrainShader->setFloat("shadowFadeStart", shadowMap.getFadeStart());
+    terrainShader->setFloat("shadowFadeEnd", shadowMap.getFadeEnd());
+
     textureAtlas.bind(0);
 
     terrainShader->setFloat("passAlpha", 1.0f);
@@ -68,7 +88,45 @@ void ChunkRenderer::render(const World& world, const glm::mat4& projection, cons
     renderWater();
 }
 
-void ChunkRenderer::cullChunks(const World& world, const glm::mat4& viewProj) {
+void ChunkRenderer::renderShadowPass(const World& world, ShadowMap& shadowMap) {
+    PROFILE_FUNCTION();
+
+    RenderStats::getInstance().setShadowPass(true);
+
+    depthShader->use();
+    depthShader->setInt("ourTexture", 0);
+    textureAtlas.bind(0);
+
+    for (int cascade = 0; cascade < shadowMap.getCascadeCount(); ++cascade) {
+        shadowMap.beginCascade(cascade);
+
+        // Each cascade is a different volume, so each needs its own cull against it.
+        cullChunks(world, shadowMap.getLightSpaceMatrix(cascade), shadowChunks);
+        depthShader->setMat4("lightSpaceMatrix", shadowMap.getLightSpaceMatrix(cascade));
+
+        depthShader->setBool("alphaTested", true);
+        for (const VisibleChunk& visible : shadowChunks) {
+            depthShader->setVec3("chunkOffset", visible.worldPos);
+            visible.chunk->draw();
+        }
+        // for grass
+        glDisable(GL_CULL_FACE);
+
+        for (const VisibleChunk& visible : shadowChunks) {
+            if (visible.chunk->isTransparentMeshEmpty())
+                continue;
+
+            depthShader->setVec3("chunkOffset", visible.worldPos);
+            visible.chunk->drawTransparent();
+        }
+
+        glEnable(GL_CULL_FACE);
+    }
+
+    RenderStats::getInstance().setShadowPass(false);
+}
+
+void ChunkRenderer::cullChunks(const World& world, const glm::mat4& viewProj, std::vector<VisibleChunk>& out) {
     PROFILE_SCOPE("ChunkRenderer::cullChunks");
 
     Frustum frustum;
@@ -77,7 +135,7 @@ void ChunkRenderer::cullChunks(const World& world, const glm::mat4& viewProj) {
     constexpr float chunkSize = static_cast<float>(Chunk::SIZE);
     constexpr float chunkHeight = static_cast<float>(Chunk::HEIGHT);
 
-    visibleChunks.clear();
+    out.clear();
 
     for (const auto& [chunkPos, chunk] : world.getChunks()) {
         glm::vec3 worldPos(chunkPos.x * chunkSize, chunkPos.y, chunkPos.z * chunkSize);
@@ -89,7 +147,7 @@ void ChunkRenderer::cullChunks(const World& world, const glm::mat4& viewProj) {
         }
 
         RenderStats::getInstance().addChunkRendered();
-        visibleChunks.push_back({worldPos, chunk.get()});
+        out.push_back({worldPos, chunk.get()});
     }
 }
 

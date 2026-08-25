@@ -12,7 +12,7 @@ namespace {
         "#version 300 es\n"
         "precision highp float; precision highp int; "
         "precision highp sampler2D; precision highp samplerCube; "
-        "precision highp sampler2DArray;\n";
+        "precision highp sampler2DArray; precision highp sampler2DShadow;\n";
 #else
     constexpr const char* VERSION_HEADER = "#version 460 core\n";
 #endif
@@ -139,6 +139,14 @@ void Shader::setFloat(const std::string &name, float value) const {
 
 void Shader::setMat4(const std::string &name, const glm::mat4 &value) const {
     glUniformMatrix4fv(location(name), 1, GL_FALSE, glm::value_ptr(value));
+}
+
+void Shader::setMat4Array(const std::string &name, const glm::mat4 *values, int count) const {
+    glUniformMatrix4fv(location(name), count, GL_FALSE, glm::value_ptr(values[0]));
+}
+
+void Shader::setFloatArray(const std::string &name, const float *values, int count) const {
+    glUniform1fv(location(name), count, values);
 }
 
 void Shader::setMat3(const std::string &name, const glm::mat3 &value) const {

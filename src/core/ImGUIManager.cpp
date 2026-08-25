@@ -13,10 +13,11 @@
 
 
 ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
-                           DayCycle& _dayCycle, int& _fpsLimit) :
+                           DayCycle& _dayCycle, int& _fpsLimit, ShadowMap& _shadowMap) :
     world(_world), camera(_camera),
     player(_player), entityManager(*_world.getEntityManager()),
     dayCycle(_dayCycle),
+    shadowMap(_shadowMap),
     renderDistance(_renderDistance),
     fpsLimit(_fpsLimit)
 {}
@@ -72,7 +73,7 @@ void ImGUIManager::drawImGUIElements(float deltaTime) {
     ImGui::Text("Sun dir: %.2f, %.2f, %.2f", sun.x, sun.y, sun.z);
 
     float dayLength = dayCycle.getDayLength();
-    if (ImGui::SliderFloat("Day length (s)", &dayLength, 5.0f, 600.0f, "%.0f")) {
+    if (ImGui::SliderFloat("Day length (s)", &dayLength, 0.0f, 1200.0f, "%.0f")) {
         dayCycle.setDayLength(dayLength);
     }
 
@@ -80,6 +81,9 @@ void ImGUIManager::drawImGUIElements(float deltaTime) {
     if (ImGui::SliderFloat("Time of day", &timeOfDay, 0.0f, 1.0f, "%.3f")) {
         dayCycle.setTimeOfDay(timeOfDay);
     }
+
+    drawShadowSettings();
+    drawTestScene();
 
     // Player stats
     ImGui::SeparatorText("Player");
@@ -114,6 +118,75 @@ void ImGUIManager::drawImGUIElements(float deltaTime) {
     ImGui::End();
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void ImGUIManager::drawShadowSettings() {
+    ShadowSettings& shadow = shadowMap.getSettings();
+
+    ImGui::SeparatorText("Shadows");
+    ImGui::Checkbox("Sun shadows", &shadow.enabled);
+
+    if (!shadow.enabled) {
+        return;
+    }
+
+    const RenderStats& stats = RenderStats::getInstance();
+    ImGui::Text("Casters: %d chunks, %d draws",
+                stats.getShadowChunks(), stats.getShadowDrawCalls());
+    ImGui::Text("Strength: %.2f", shadowMap.getEffectiveStrength());
+
+    static const char* RESOLUTIONS[] = {"512", "1024", "2048", "4096", "8192"};
+    int resolutionIndex = 0;
+    while (resolutionIndex < 4 && (512 << resolutionIndex) < shadow.resolution) {
+        resolutionIndex++;
+    }
+    if (ImGui::Combo("Resolution", &resolutionIndex, RESOLUTIONS, IM_ARRAYSIZE(RESOLUTIONS))) {
+        shadow.resolution = 512 << resolutionIndex;
+    }
+
+    // ImGui::SliderInt("Cascades", &shadow.cascadeCount, 1, ShadowMap::MAX_CASCADES);
+    // ImGui::SliderFloat("Near radius", &shadow.nearRadius, 4.0f, 128.0f, "%.0f blocks");
+    // ImGui::SliderFloat("Radius", &shadow.radius, 32.0f, 512.0f, "%.0f blocks");
+
+    // for (int i = 0; i < shadowMap.getCascadeCount(); ++i) {
+    //     ImGui::Text("  cascade %d: to %5.0f blocks, %.4f blocks/texel",
+    //                 i, shadowMap.getSplitDistances()[i], shadowMap.getTexelWorldSize(i));
+    // }
+
+    // ImGui::SliderFloat("Strength", &shadow.strength, 0.0f, 1.0f, "%.2f");
+    // ImGui::SliderFloat("Poly offset factor", &shadow.polygonOffsetFactor, 0.0f, 16.0f, "%.1f");
+    // ImGui::SliderFloat("Poly offset units", &shadow.polygonOffsetUnits, 0.0f, 32.0f, "%.1f");
+    // ImGui::Checkbox("Cull front faces", &shadow.cullFrontFaces);
+    ImGui::Checkbox("Show depth map", &shadow.debugView);
+}
+
+void ImGUIManager::goTo(const TestScene::Viewpoint& view) {
+    player.respawn(view.position);
+    camera.Yaw = view.yaw;
+    camera.Pitch = view.pitch;
+    camera.ProcessMouseMovement(0.0f, 0.0f);
+}
+
+void ImGUIManager::drawTestScene() {
+    ImGui::SeparatorText("Test scene");
+
+    if (ImGui::Checkbox("Flat test world", &TestScene::enabled)) {
+        world.regenerate(world.getSeed());
+        goTo(TestScene::OVERVIEW);
+    }
+
+    if (!TestScene::enabled) {
+        ImGui::TextDisabled("Fixed props on a flat plane, for reproducible renderer tests.");
+        return;
+    }
+
+    ImGui::TextDisabled("Freeze the sun with Day length 0 to hold one light angle.");
+
+    if (ImGui::Button("Grazing wall")) goTo(TestScene::WALL_VIEW);
+    ImGui::SameLine();
+    if (ImGui::Button("Ground")) goTo(TestScene::GROUND_VIEW);
+    ImGui::SameLine();
+    if (ImGui::Button("Overview")) goTo(TestScene::OVERVIEW);
 }
 
 std::string ImGUIManager::formatNumber(int number) {

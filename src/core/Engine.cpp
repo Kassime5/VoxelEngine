@@ -40,6 +40,7 @@
 #include "src/core/ImGUIManager.h"
 #include "src/core/Window.h"
 #include "src/debug/RenderStats.h"
+#include "src/debug/TestScene.h"
 #include "src/game/HighlightBox.h"
 #include "src/game/HotbarRenderer.h"
 #include "src/game/HUDRenderer.h"
@@ -48,6 +49,7 @@
 #include "src/input/InputManager.h"
 #include "src/input/PlayerController.h"
 #include "src/rendering/ChunkRenderer.h"
+#include "src/rendering/ShadowMap.h"
 #include "src/rendering/Skybox.h"
 #include "src/rendering/SkyBodyRenderer.h"
 #include "src/world/World.h"
@@ -206,6 +208,7 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
         std::cerr << "Failed to load texture atlas!" << std::endl;
     }
 
+    shadowMap = std::make_unique<ShadowMap>();
     world = std::make_unique<World>(*player, chunkRenderer->getTextureAtlas());
     world->setRenderDistance(renderDistance);
 
@@ -223,7 +226,7 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 #ifndef __EMSCRIPTEN__
     initImGui();
     imGUIManager = std::make_unique<ImGUIManager>(*world, player->getCamera(), renderDistance,
-                                                  *player, dayCycle, fpsLimit);
+                                                  *player, dayCycle, fpsLimit, *shadowMap);
 #endif
 
     highlightBox = std::make_unique<HighlightBox>();
@@ -291,7 +294,13 @@ void Engine::step() {
         static_cast<int>(std::floor(eye.y)),
         static_cast<int>(std::floor(eye.z))) == BlockType::Water;
 
-    chunkRenderer->render(*world, projection, view, sun, eye, underwater, *skybox);
+    if (shadowMap->update(sun, eye)) {
+        shadowMap->beginPass();
+        chunkRenderer->renderShadowPass(*world, *shadowMap);
+        shadowMap->endPass(framebufferWidth, framebufferHeight);
+    }
+
+    chunkRenderer->render(*world, projection, view, sun, eye, underwater, *skybox, *shadowMap);
     entityManager->render(projection, view);
     entityManager->renderDebug(projection, view);
 
@@ -316,6 +325,17 @@ void Engine::step() {
 
     hudRenderer->drawCrosshair();
     hotbarRenderer->draw(*hudRenderer, player->getHotbar(), chunkRenderer->getTextureAtlas());
+
+    if (shadowMap->getSettings().debugView) {
+        const int cascades = shadowMap->getCascadeCount();
+        const float size = static_cast<float>(std::min(framebufferWidth, framebufferHeight)) * 0.22f;
+        shadowMap->setDepthCompare(false);
+        for (int i = 0; i < cascades; ++i) {
+            hudRenderer->drawTile(size * (0.5f + i) + 8.0f * (i + 1), size * 0.5f + 8.0f,
+                                  size, size, shadowMap->getDepthTexture(), i);
+        }
+        shadowMap->setDepthCompare(true);
+    }
 
 #ifndef __EMSCRIPTEN__
     if (showDebugUI) {

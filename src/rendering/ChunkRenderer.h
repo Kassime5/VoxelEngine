@@ -14,6 +14,7 @@
 
 class Chunk;
 class Shader;
+class ShadowMap;
 class Skybox;
 class World;
 
@@ -34,14 +35,18 @@ public:
     // Culls once, then replays the surviving chunks for the opaque, transparent and water passes.
     void render(const World& world, const glm::mat4& projection, const glm::mat4& view,
                 const SunState& sun, const glm::vec3& viewPos, bool underwater,
-                const Skybox& skybox);
+                const Skybox& skybox, const ShadowMap& shadowMap);
+
+    // Depth-only pass into the shadow map
+    void renderShadowPass(const World& world, ShadowMap& shadowMap);
 
 private:
     static constexpr float WATER_ALPHA = 0.7f;
     static constexpr float WATER_FOG_DENSITY = 0.04f;
-    static constexpr float FOG_EDGE_FALLOFF = 1.8f;
+    static constexpr float FOG_EDGE_FALLOFF = 1.5f;
     static constexpr int DAY_SKY_UNIT = 2;
     static constexpr int NIGHT_SKY_UNIT = 3;
+    static constexpr int SHADOW_UNIT = 4;
 
     struct VisibleChunk {
         glm::vec3 worldPos;
@@ -49,12 +54,15 @@ private:
     };
 
     Shader* terrainShader;
+    Shader* depthShader;
     TextureAtlas textureAtlas;
 
     // Retained across frames so the per-frame cull does not reallocate.
     std::vector<VisibleChunk> visibleChunks;
+    std::vector<VisibleChunk> shadowChunks;
 
-    void cullChunks(const World& world, const glm::mat4& viewProj);
+    void cullChunks(const World& world, const glm::mat4& viewProj,
+                    std::vector<VisibleChunk>& out);
     void renderOpaque() const;
     void renderTransparent() const;
     void renderWater() const;

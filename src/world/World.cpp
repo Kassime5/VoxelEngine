@@ -3,6 +3,7 @@
 //
 
 #include "World.h"
+#include "src/debug/TestScene.h"
 #include "src/game/Player.h"
 
 #include <limits>
@@ -155,6 +156,8 @@ void World::generationWorkerThread(std::stop_token stopToken) {
 }
 
 void World::processPendingEntitySpawns(int maxPerFrame) {
+    if (TestScene::enabled) return;
+
     int processed = 0;
 
     // TODO: Maybe make entities spawn in group (e.g. family of cows)

@@ -122,6 +122,7 @@ private:
     std::optional<glm::ivec3> structureSpawnPoint;
 
     void generateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
+    void generateTestSceneTerrain();
     void decorateTerrain(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
     void placeStructures(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBiome);
 
