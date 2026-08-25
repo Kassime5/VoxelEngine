@@ -49,6 +49,7 @@
 #include "src/input/InputManager.h"
 #include "src/input/PlayerController.h"
 #include "src/rendering/ChunkRenderer.h"
+#include "src/rendering/CloudRenderer.h"
 #include "src/rendering/ShadowMap.h"
 #include "src/rendering/Skybox.h"
 #include "src/rendering/SkyBodyRenderer.h"
@@ -221,12 +222,16 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
         }
     });
 
+    cloudRenderer = std::make_unique<CloudRenderer>(world->getSeed());
+    cloudRenderer->setGridSize(renderDistance);
+
     playerController = std::make_unique<PlayerController>(player.get(), world.get());
 
 #ifndef __EMSCRIPTEN__
     initImGui();
     imGUIManager = std::make_unique<ImGUIManager>(*world, player->getCamera(), renderDistance,
-                                                  *player, dayCycle, fpsLimit, *shadowMap);
+                                                  *player, dayCycle, fpsLimit, *shadowMap,
+                                                  *cloudRenderer);
 #endif
 
     highlightBox = std::make_unique<HighlightBox>();
@@ -275,6 +280,7 @@ void Engine::step() {
     entityManager->update(deltaTime, world.get());
     soundManager->update();
     dayCycle.update(deltaTime);
+    cloudRenderer->update(deltaTime);
 
     // Built from the live framebuffer size, not the requested window size: the two
     // diverge on resize, and on the web the canvas is whatever the page gives us.
@@ -313,6 +319,9 @@ void Engine::step() {
     skybox->draw(view, projection, sun);
     // After the skybox: both sit against the far plane, so the later draw is the visible one.
     skyBodyRenderer->draw(view, projection, sun);
+
+    // After the sky
+    cloudRenderer->draw(projection, view, sun, eye);
 
     // After the sky so it covers it too, before the HUD so that stays readable.
     if (underwater) {
@@ -365,12 +374,14 @@ void Engine::regenerateWorld() {
 
     world->regenerate();
     player->respawn(Player::SPAWN_POSITION);
+    cloudRenderer->regenerate(world->getSeed());
 
     std::cout << "New world, seed " << world->getSeed() << std::endl;
 }
 
 void Engine::setRenderDistance(int distance) {
     renderDistance = std::clamp(distance, 2, 32);
+    cloudRenderer->setGridSize(renderDistance);
     if (world) {
         world->setRenderDistance(renderDistance);
     }

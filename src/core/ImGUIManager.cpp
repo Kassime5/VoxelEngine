@@ -13,11 +13,13 @@
 
 
 ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
-                           DayCycle& _dayCycle, int& _fpsLimit, ShadowMap& _shadowMap) :
+                           DayCycle& _dayCycle, int& _fpsLimit, ShadowMap& _shadowMap,
+                           CloudRenderer& _cloudRenderer) :
     world(_world), camera(_camera),
     player(_player), entityManager(*_world.getEntityManager()),
     dayCycle(_dayCycle),
     shadowMap(_shadowMap),
+    cloudRenderer(_cloudRenderer),
     renderDistance(_renderDistance),
     fpsLimit(_fpsLimit)
 {}
@@ -83,6 +85,7 @@ void ImGUIManager::drawImGUIElements(float deltaTime) {
     }
 
     drawShadowSettings();
+    drawCloudSettings();
     drawTestScene();
 
     // Player stats
@@ -103,6 +106,7 @@ void ImGUIManager::drawImGUIElements(float deltaTime) {
     ImGui::SeparatorText("Settings");
     if (ImGui::SliderInt("Render Distance", &renderDistance, 2, 32)) {
         world.setRenderDistance(renderDistance);
+        cloudRenderer.setGridSize(renderDistance);
     }
 
     // Snaps to 0 below the useful range, which the engine reads as uncapped.
@@ -158,6 +162,22 @@ void ImGUIManager::drawShadowSettings() {
     // ImGui::SliderFloat("Poly offset units", &shadow.polygonOffsetUnits, 0.0f, 32.0f, "%.1f");
     // ImGui::Checkbox("Cull front faces", &shadow.cullFrontFaces);
     ImGui::Checkbox("Show depth map", &shadow.debugView);
+}
+
+void ImGUIManager::drawCloudSettings() {
+    CloudSettings& clouds = cloudRenderer.getSettings();
+
+    ImGui::SeparatorText("Clouds");
+    ImGui::Checkbox("Clouds", &clouds.enabled);
+
+    if (!clouds.enabled) {
+        return;
+    }
+
+    ImGui::SliderFloat("Cloud height", &clouds.height, 80.0f, 320.0f, "%.0f blocks");
+    ImGui::SliderFloat("Coverage", &clouds.coverage, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Opacity", &clouds.opacity, 0.05f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Wind speed", &clouds.windSpeed, 0.0f, 12.0f, "%.1f blocks/s");
 }
 
 void ImGUIManager::goTo(const TestScene::Viewpoint& view) {

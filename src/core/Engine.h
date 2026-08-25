@@ -21,6 +21,7 @@ class ImGUIManager;
 #endif
 
 class ChunkRenderer;
+class CloudRenderer;
 class HighlightBox;
 class HotbarRenderer;
 class HUDRenderer;
@@ -101,6 +102,7 @@ private:
     std::unique_ptr<HotbarRenderer> hotbarRenderer;
     std::unique_ptr<Skybox> skybox;
     std::unique_ptr<SkyBodyRenderer> skyBodyRenderer;
+    std::unique_ptr<CloudRenderer> cloudRenderer;
     std::unique_ptr<ChunkRenderer> chunkRenderer;
     std::unique_ptr<ShadowMap> shadowMap;
     std::unique_ptr<World> world;

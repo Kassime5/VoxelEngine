@@ -8,6 +8,7 @@
 #ifndef GLFWVOXEL_IMGUIMANAGER_H
 #define GLFWVOXEL_IMGUIMANAGER_H
 #include "src/rendering/Camera.h"
+#include "src/rendering/CloudRenderer.h"
 #include "src/debug/TestScene.h"
 #include "src/rendering/ShadowMap.h"
 #include "src/world/World.h"
@@ -24,7 +25,8 @@ class ImGUIManager
 {
 public:
     ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
-                 DayCycle& _dayCycle, int& _fpsLimit, ShadowMap& _shadowMap);
+                 DayCycle& _dayCycle, int& _fpsLimit, ShadowMap& _shadowMap,
+                 CloudRenderer& _cloudRenderer);
     ~ImGUIManager();
     void drawImGUIElements(float deltaTime);
 private:
@@ -34,6 +36,7 @@ private:
     EntityManager& entityManager;
     DayCycle& dayCycle;
     ShadowMap& shadowMap;
+    CloudRenderer& cloudRenderer;
 
     bool wireframe = false;
     int& renderDistance;
@@ -41,6 +44,7 @@ private:
 
     std::string formatNumber(int number);
     void drawShadowSettings();
+    void drawCloudSettings();
     void drawTestScene();
     void goTo(const TestScene::Viewpoint& view);
 };
