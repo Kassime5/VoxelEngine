@@ -9,6 +9,7 @@
 #include "Chunk.h"
 #include "../rendering/TextureAltas.h"
 #include <unordered_map>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -42,6 +43,10 @@ struct ChunkMeshTask {
     MeshData meshData;
     MeshData transparentMeshData;
     MeshData waterMeshData;
+    // The chunk's edit version when this build started
+    std::uint32_t editVersion = 0;
+    // Player edits take priority
+    bool playerEdit = false;
 };
 
 struct RaycastResult {
@@ -120,14 +125,17 @@ private:
     std::mutex generationQueueMutex;
     std::condition_variable_any generationQueueCV;
 
-    // Thread pool for mesh building
+    // Thread pool for mesh building. Both queues share one mutex and CV; the edit queue is
+    // drained first so a placed block never waits behind a render-distance worth of terrain.
     std::vector<std::jthread> meshBuildThreads;
     std::queue<ChunkMeshTask> meshBuildQueue;
+    std::queue<ChunkMeshTask> editMeshBuildQueue;
     std::mutex meshBuildQueueMutex;
     std::condition_variable_any meshBuildQueueCV;
 
-    // GPU upload queue (processed on main thread)
+    // GPU upload queues (processed on main thread), same priority split
     std::queue<ChunkMeshTask> gpuUploadQueue;
+    std::queue<ChunkMeshTask> editGpuUploadQueue;
     std::mutex gpuUploadQueueMutex;
 
     std::queue<glm::ivec3> pendingEntitySpawns;
@@ -138,7 +146,7 @@ private:
     void shutdownThreadPool();
     void generationWorkerThread(std::stop_token stopToken);
     void meshBuildWorkerThread(std::stop_token stopToken);
-    void processGPUUploadQueue(int maxPerFrame);
+    void processGPUUploadQueue(std::chrono::microseconds budget);
     bool processOneGenerationTask();
     bool processOneMeshBuildTask();
     void pumpChunkWork(std::chrono::microseconds budget);
@@ -160,7 +168,7 @@ private:
     // A chunk meshes its borders against whatever its neighbours held at the time, so those
     // borders go stale when a neighbour arrives or a seam block changes. Main thread only.
     std::shared_ptr<Chunk> getChunkShared(const glm::ivec3& chunkPos) const;
-    void queueRemesh(std::shared_ptr<Chunk> chunk);
+    void queueRemesh(std::shared_ptr<Chunk> chunk, bool playerEdit);
     void collectStaleNeighbours(const glm::ivec3& chunkPos,
                                 std::vector<std::shared_ptr<Chunk>>& out);
 

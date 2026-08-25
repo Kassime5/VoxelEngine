@@ -34,7 +34,7 @@ static const int FACE_NORMALS[6][3] = {
 };
 
 Chunk::Chunk(const glm::ivec3 &position)
-    : chunkPosition(position), chunkDirty(true), chunkState(ChunkState::Empty) {
+    : chunkPosition(position), chunkState(ChunkState::Empty) {
     for (auto & m_block : chunkBlocks) {
         for (auto & y : m_block) {
             for (auto & z : y) {
@@ -64,7 +64,7 @@ void Chunk::setBlock(int x, int y, int z, BlockType type) {
         solidMinY = std::min(solidMinY, y);
         solidMaxY = std::max(solidMaxY, y);
     }
-    chunkDirty = true;
+    editVersion.fetch_add(1);
 }
 
 namespace {
@@ -101,7 +101,6 @@ void Chunk::generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBio
     // Fixed geometry
     if (TestScene::enabled) {
         generateTestSceneTerrain();
-        chunkDirty = true;
         chunkState.store(ChunkState::Generated);
         return;
     }
@@ -111,7 +110,6 @@ void Chunk::generate(const siv::PerlinNoise* perlinNoise, WorleyBiome* worleyBio
     // After decoration, so trunks overwrites grass e.g.
     placeStructures(perlinNoise, worleyBiome);
 
-    chunkDirty = true;
     chunkState.store(ChunkState::Generated);
 }
 
@@ -594,7 +592,6 @@ void Chunk::addCrossModel(MeshData& meshData, const glm::vec3& pos, BlockType bl
 void Chunk::uploadMeshToGPU(const MeshData& meshData) {
     PROFILE_SCOPE("Chunk::uploadMeshToGPU");
     chunkMesh.setData(meshData.vertices, meshData.indices);
-    chunkDirty = false;
     chunkState.store(ChunkState::Ready);
 }
 

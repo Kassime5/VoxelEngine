@@ -8,12 +8,17 @@
 
 #include <limits>
 #include <random>
+#include <utility>
 
 namespace {
 #ifdef GLFWVOXEL_SINGLE_THREADED
     // to avoid hangs on single threads
     constexpr std::chrono::microseconds CHUNK_WORK_BUDGET{6000};
 #endif
+
+    constexpr std::chrono::microseconds GPU_UPLOAD_BUDGET{2000};
+    constexpr int GPU_UPLOAD_MIN_PER_FRAME = 2;
+    constexpr int GPU_UPLOAD_MAX_ATTEMPTS = 64;
 }
 
 World::SeedType World::randomSeed() {
@@ -95,10 +100,12 @@ void World::shutdownThreadPool() {
     {
         std::lock_guard lock(meshBuildQueueMutex);
         meshBuildQueue = {};
+        editMeshBuildQueue = {};
     }
     {
         std::lock_guard lock(gpuUploadQueueMutex);
         gpuUploadQueue = {};
+        editGpuUploadQueue = {};
     }
 }
 
@@ -180,11 +187,12 @@ bool World::processOneMeshBuildTask() {
     ChunkMeshTask task;
     {
         std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
-        if (meshBuildQueue.empty()) {
+        std::queue<ChunkMeshTask>& queue = editMeshBuildQueue.empty() ? meshBuildQueue : editMeshBuildQueue;
+        if (queue.empty()) {
             return false;
         }
-        task = meshBuildQueue.front();
-        meshBuildQueue.pop();
+        task = std::move(queue.front());
+        queue.pop();
     }
 
     const glm::ivec3 chunkPos = task.chunk->getPosition();
@@ -196,6 +204,9 @@ bool World::processOneMeshBuildTask() {
     if (currentState == ChunkState::Generated || currentState == ChunkState::BuildingMesh) {
         task.chunk->setState(ChunkState::BuildingMesh);
 
+        // Read before the build, so an edit landing mid-build leaves the two out of step.
+        task.editVersion = task.chunk->getEditVersion();
+
         const ChunkNeighbourhood neighbours = snapshotNeighbourhood(chunkPos);
         task.chunk->buildMeshData(task.meshData, &textureAtlas, neighbours);
         task.chunk->buildTransparentMeshData(task.transparentMeshData, &textureAtlas);
@@ -206,7 +217,8 @@ bool World::processOneMeshBuildTask() {
             task.chunk->setState(ChunkState::MeshBuilt);
             {
                 std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
-                gpuUploadQueue.push(std::move(task));
+                std::queue<ChunkMeshTask>& queue = task.playerEdit ? editGpuUploadQueue : gpuUploadQueue;
+                queue.push(std::move(task));
             }
         }
     }
@@ -219,7 +231,7 @@ void World::meshBuildWorkerThread(std::stop_token stopToken) {
         {
             std::unique_lock<std::mutex> lock(meshBuildQueueMutex);
             meshBuildQueueCV.wait(lock, stopToken, [this] {
-                return !meshBuildQueue.empty();
+                return !meshBuildQueue.empty() || !editMeshBuildQueue.empty();
             });
         }
 
@@ -255,17 +267,22 @@ std::shared_ptr<Chunk> World::getChunkShared(const glm::ivec3& chunkPos) const {
 }
 
 // Takes the chunk by value: the queued task has to keep it alive until a worker gets to it.
-void World::queueRemesh(std::shared_ptr<Chunk> chunk) {
-    // Anything not yet Ready is still in flight and will mesh against current data anyway.
+void World::queueRemesh(std::shared_ptr<Chunk> chunk, bool playerEdit) {
+    // Anything not yet Ready already has a build queued or running. That build either reads
+    // the edit outright or finishes carrying a stale editVersion, and the upload re-queues it.
     if (!chunk || chunk->getState() != ChunkState::Ready) {
         return;
     }
 
-    chunk->markDirty();
     chunk->setState(ChunkState::Generated);
     {
+        ChunkMeshTask task;
+        task.chunk = std::move(chunk);
+        task.playerEdit = playerEdit;
+
         std::lock_guard<std::mutex> lock(meshBuildQueueMutex);
-        meshBuildQueue.push({std::move(chunk), MeshData(), MeshData(), MeshData()});
+        std::queue<ChunkMeshTask>& queue = playerEdit ? editMeshBuildQueue : meshBuildQueue;
+        queue.push(std::move(task));
     }
     meshBuildQueueCV.notify_one();
 }
@@ -284,25 +301,31 @@ void World::collectStaleNeighbours(const glm::ivec3& chunkPos,
     }
 }
 
-void World::processGPUUploadQueue(int maxPerFrame) {
+void World::processGPUUploadQueue(std::chrono::microseconds budget) {
     PROFILE_SCOPE("World::processGPUUploadQueue");
 
-    // Drained first, then processed with no queue lock held. The GL uploads below are slow
-    // enough to stall mesh workers trying to push, and the chunk lookups would otherwise
-    // nest chunksMutex inside this one -- the one ordering nothing else takes in reverse,
-    // which is exactly the kind of thing that stops being true later.
-    std::vector<ChunkMeshTask> batch;
-    {
-        std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
-        while (!gpuUploadQueue.empty() && static_cast<int>(batch.size()) < maxPerFrame) {
-            batch.push_back(std::move(gpuUploadQueue.front()));
-            gpuUploadQueue.pop();
-        }
-    }
+    const auto deadline = std::chrono::steady_clock::now() + budget;
 
     std::vector<std::shared_ptr<Chunk>> staleNeighbours;
 
-    for (ChunkMeshTask& task : batch) {
+    // Chunk plus whether its edit came from the player, so the remesh keeps its priority.
+    std::vector<std::pair<std::shared_ptr<Chunk>, bool>> outdated;
+    int uploaded = 0;
+
+    for (int attempt = 0; attempt < GPU_UPLOAD_MAX_ATTEMPTS; attempt++) {
+        ChunkMeshTask task;
+        {
+            // Popped one at a time so the GL uploads below never run under this lock
+            std::lock_guard<std::mutex> lock(gpuUploadQueueMutex);
+            std::queue<ChunkMeshTask>& queue = editGpuUploadQueue.empty() ? gpuUploadQueue
+                                                                         : editGpuUploadQueue;
+            if (queue.empty()) {
+                break;
+            }
+            task = std::move(queue.front());
+            queue.pop();
+        }
+
         const glm::ivec3 chunkPos = task.chunk->getPosition();
 
         if (!isChunkLoaded(chunkPos) || task.chunk->getState() != ChunkState::MeshBuilt) {
@@ -312,6 +335,7 @@ void World::processGPUUploadQueue(int maxPerFrame) {
         task.chunk->uploadMeshToGPU(task.meshData);
         task.chunk->uploadTransparentMeshToGPU(task.transparentMeshData);
         task.chunk->uploadWaterMeshToGPU(task.waterMeshData);
+        uploaded++;
 
         // Only on a chunk's first arrival. Remeshing never re-notifies, which is what
         // makes the cascade terminate instead of ringing between neighbours.
@@ -319,10 +343,23 @@ void World::processGPUUploadQueue(int maxPerFrame) {
             task.chunk->markNeighboursNotified();
             collectStaleNeighbours(chunkPos, staleNeighbours);
         }
+
+        // Blocks were edited after this mesh was built, requeue it
+        if (task.chunk->getEditVersion() != task.editVersion) {
+            outdated.emplace_back(std::move(task.chunk), task.playerEdit);
+        }
+
+        if (uploaded >= GPU_UPLOAD_MIN_PER_FRAME && std::chrono::steady_clock::now() >= deadline) {
+            break;
+        }
+    }
+
+    for (auto& [chunk, playerEdit] : outdated) {
+        queueRemesh(std::move(chunk), playerEdit);
     }
 
     for (auto& neighbour : staleNeighbours) {
-        queueRemesh(std::move(neighbour));
+        queueRemesh(std::move(neighbour), false);
     }
 }
 
@@ -350,7 +387,7 @@ void World::update(const glm::vec3& cameraPosition) {
 
     {
         PROFILE_SCOPE("World::update - GPU uploads");
-        processGPUUploadQueue(2);
+        processGPUUploadQueue(GPU_UPLOAD_BUDGET);
     }
 
     // Main thread, so the GL deletes in ~Chunk have a context.
@@ -413,19 +450,19 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
         onBlockChange(glm::ivec3(worldX, worldY, worldZ), previous, type);
     }
 
-    queueRemesh(chunk);
+    queueRemesh(chunk, true);
 
     // An edit on a seam changes what the neighbour should draw there, so its mesh is stale
     // too. A corner block touches two of them.
     if (localPos.x == 0) {
-        queueRemesh(getChunkShared(chunkPos + glm::ivec3(-1, 0, 0)));
+        queueRemesh(getChunkShared(chunkPos + glm::ivec3(-1, 0, 0)), true);
     } else if (localPos.x == Chunk::SIZE - 1) {
-        queueRemesh(getChunkShared(chunkPos + glm::ivec3(1, 0, 0)));
+        queueRemesh(getChunkShared(chunkPos + glm::ivec3(1, 0, 0)), true);
     }
     if (localPos.z == 0) {
-        queueRemesh(getChunkShared(chunkPos + glm::ivec3(0, 0, -1)));
+        queueRemesh(getChunkShared(chunkPos + glm::ivec3(0, 0, -1)), true);
     } else if (localPos.z == Chunk::SIZE - 1) {
-        queueRemesh(getChunkShared(chunkPos + glm::ivec3(0, 0, 1)));
+        queueRemesh(getChunkShared(chunkPos + glm::ivec3(0, 0, 1)), true);
     }
 }
 Chunk* World::getChunk(const glm::ivec3& chunkPos) {

@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <optional>
 #include "../rendering/Meshes/ChunkMesh.h"
@@ -88,8 +89,8 @@ public:
 
     glm::ivec3 getPosition() const { return chunkPosition; }
 
-    bool isDirty() const { return chunkDirty; }
-    void markDirty() { chunkDirty = true; }
+    // Bumped on every block write to prioritize edited chunks over new ones
+    std::uint32_t getEditVersion() const { return editVersion.load(); }
 
     ChunkState getState() const { return chunkState.load(); }
     void setState(ChunkState state) { chunkState.store(state); }
@@ -117,7 +118,7 @@ private:
     int solidMinY = HEIGHT, solidMaxY = -1;
     int waterMinY = HEIGHT, waterMaxY = -1;
 
-    bool chunkDirty;
+    std::atomic<std::uint32_t> editVersion{0};
     std::atomic<ChunkState> chunkState;
     std::optional<glm::ivec3> structureSpawnPoint;
 
