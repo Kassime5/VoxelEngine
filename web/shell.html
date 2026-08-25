@@ -413,7 +413,9 @@
 	window.addEventListener("pointerup", function () { dragging = null; });
 
 	function callEngine(name, arg) {
-		if (window.Module && typeof Module[name] === "function") Module[name](arg);
+		if (!window.Module || typeof Module[name] !== "function") return;
+		if (arguments.length > 1) Module[name](arg);
+		else Module[name]();
 	}
 
 	slider.rd.addEventListener("input", function () {
