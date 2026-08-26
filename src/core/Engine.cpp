@@ -117,7 +117,7 @@ namespace {
 #endif
 
     constexpr float NEAR_PLANE = 0.1f;
-    constexpr float FAR_PLANE = 1000.0f;
+    constexpr float FAR_PLANE = 2500.0f;
     constexpr float REACH_DISTANCE = 5.0f;
 
 #ifndef __EMSCRIPTEN__
@@ -229,9 +229,9 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
 
 #ifndef __EMSCRIPTEN__
     initImGui();
-    imGUIManager = std::make_unique<ImGUIManager>(*world, player->getCamera(), renderDistance,
-                                                  *player, dayCycle, fpsLimit, *shadowMap,
-                                                  *cloudRenderer);
+    imGUIManager = std::make_unique<ImGUIManager>(*this, *world, player->getCamera(),
+                                                  renderDistance, *player, dayCycle, fpsLimit,
+                                                  *shadowMap, *cloudRenderer);
 #endif
 
     highlightBox = std::make_unique<HighlightBox>();
@@ -295,10 +295,14 @@ void Engine::step() {
 
     // One check feeds both the terrain fog and the screen tint, so they cannot disagree.
     const glm::vec3 eye = player->getCamera().Position;
-    const bool underwater = world->getBlock(
-        static_cast<int>(std::floor(eye.x)),
-        static_cast<int>(std::floor(eye.y)),
-        static_cast<int>(std::floor(eye.z))) == BlockType::Water;
+    const glm::ivec3 eyeCell(static_cast<int>(std::floor(eye.x)),
+                             static_cast<int>(std::floor(eye.y)),
+                             static_cast<int>(std::floor(eye.z)));
+    // An exposed water block is drawn WATER_SURFACE_DROP short
+    const bool aboveWaterline = world->getBlock(eyeCell.x, eyeCell.y + 1, eyeCell.z) != BlockType::Water &&
+        eye.y > static_cast<float>(eyeCell.y + 1) - WATER_SURFACE_DROP;
+    const bool underwater =
+        world->getBlock(eyeCell.x, eyeCell.y, eyeCell.z) == BlockType::Water && !aboveWaterline;
 
     if (shadowMap->update(sun, eye)) {
         shadowMap->beginPass();
@@ -367,16 +371,18 @@ void Engine::step() {
 #endif
 }
 
-void Engine::regenerateWorld() {
+void Engine::regenerateWorld(std::uint32_t seed) {
     if (!world || !player) {
         return;
     }
 
-    world->regenerate();
+    world->regenerate(static_cast<World::SeedType>(seed));
     player->respawn(Player::SPAWN_POSITION);
     cloudRenderer->regenerate(world->getSeed());
+}
 
-    std::cout << "New world, seed " << world->getSeed() << std::endl;
+void Engine::regenerateWorld() {
+    regenerateWorld(World::randomSeed());
 }
 
 void Engine::setRenderDistance(int distance) {
@@ -577,6 +583,11 @@ EMSCRIPTEN_KEEPALIVE void voxel_set_day_length(float seconds) {
 
 EMSCRIPTEN_KEEPALIVE void voxel_new_world() {
     if (g_engine) g_engine->regenerateWorld();
+}
+
+// Free text, same rules as the desktop seed box. Empty picks a random seed.
+EMSCRIPTEN_KEEPALIVE void voxel_set_seed(const char* text) {
+    if (g_engine) g_engine->regenerateWorld(World::seedFromString(text ? text : ""));
 }
 
 }

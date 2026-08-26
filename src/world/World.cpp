@@ -8,6 +8,7 @@
 
 #include <limits>
 #include <random>
+#include <stdexcept>
 #include <utility>
 
 namespace {
@@ -24,6 +25,31 @@ namespace {
 World::SeedType World::randomSeed() {
     std::random_device rd;
     return static_cast<SeedType>(rd());
+}
+
+World::SeedType World::seedFromString(const std::string& text) {
+    const std::size_t first = text.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return randomSeed();
+    }
+    const std::string trimmed = text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+
+    if (trimmed.find_first_not_of("0123456789") == std::string::npos) {
+        try {
+            // Wider than SeedType on purpose: a long digit string truncates rather than throws
+            return static_cast<SeedType>(std::stoull(trimmed));
+        } catch (const std::out_of_range&) {
+            // too long even for that, fall through and hash it
+        }
+    }
+
+    // FNV-1a
+    SeedType hash = 2166136261u;
+    for (const char c : trimmed) {
+        hash ^= static_cast<unsigned char>(c);
+        hash *= 16777619u;
+    }
+    return hash;
 }
 
 World::World(Player& _player, const TextureAtlas& _textureAtlas)

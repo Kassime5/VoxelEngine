@@ -96,6 +96,7 @@ bool InputManager::isKeyPressed(int key) const {
 }
 
 bool InputManager::isKeyHeld(int key) const {
+    if (uiCapturesKeyboard) return false;
     auto it = keyStates.find(key);
     return it != keyStates.end() && (it->second == InputState::Held || it->second == InputState::JustPressed);
 }

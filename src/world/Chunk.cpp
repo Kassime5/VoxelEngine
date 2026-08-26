@@ -360,12 +360,23 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
         hi[1] = solidMaxY;
     }
 
+    // Water with anything but water above draws its top edge lowered
+    auto isWaterSurface = [&](int localX, int localY, int localZ) {
+        const bool inside = localX >= 0 && localX < SIZE && localZ >= 0 && localZ < SIZE;
+        const BlockType above = inside
+            ? getBlock(localX, localY + 1, localZ)
+            : neighbours.getBlock(chunkPosition.x * SIZE + localX, localY + 1,
+                                  chunkPosition.z * SIZE + localZ);
+        return above != BlockType::Water;
+    };
+
     // For each slice along the axis
     for (x[axis] = lo[axis] - 1; x[axis] <= hi[axis]; ) {
         // Build mask for this slice
         struct MaskEntry {
             BlockType blockType;
             BlockFace face;
+            bool surface;
         };
 
         // Indexed explicitly by (v, u) with the full stride rather than by a running
@@ -415,15 +426,17 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
                 bool drawCurrent = currentIsOurs && blockInPass(blockCurrent, pass) && blockCurrent != blockNext &&!isBlockOpaque(blockNext);
                 bool drawNext = nextIsOurs && blockInPass(blockNext, pass) && blockNext != blockCurrent &&!isBlockOpaque(blockCurrent);
 
+                // blockInPass already pinned the type, so in the water pass the surface test
+                // is all that is left to ask.
                 MaskEntry& slot = mask[x[v] * chunkSize[u] + x[u]];
                 if (drawCurrent) {
                     // Current block facing +axis
-                    slot = {blockCurrent, positiveFace};
+                    slot = {blockCurrent, positiveFace, pass == MeshPass::Water && isWaterSurface(x[0], x[1], x[2])};
                 } else if (drawNext) {
                     // Next block facing -axis
-                    slot = {blockNext, negativeFace};
+                    slot = {blockNext, negativeFace, pass == MeshPass::Water && isWaterSurface(x[0] + q[0], x[1] + q[1], x[2] + q[2])};
                 } else {
-                    slot = {BlockType::Air, BlockFace::Top};
+                    slot = {BlockType::Air, BlockFace::Top, false};
                 }
             }
         }
@@ -437,12 +450,14 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
                 if (mask[n].blockType != BlockType::Air) {
                     BlockType currentBlock = mask[n].blockType;
                     BlockFace currentFace = mask[n].face;
+                    bool currentSurface = mask[n].surface;
 
                     // Compute width - merge quads with same block type AND face
                     int w;
                     for (w = 1; i + w <= hi[u] &&
                          mask[n + w].blockType == currentBlock &&
-                         mask[n + w].face == currentFace; ++w) {}
+                         mask[n + w].face == currentFace &&
+                         mask[n + w].surface == currentSurface; ++w) {}
 
                     // Compute height
                     bool done = false;
@@ -450,7 +465,8 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
                     for (h = 1; j + h <= hi[v]; ++h) {
                         for (int k = 0; k < w; ++k) {
                             if (mask[n + k + h * chunkSize[u]].blockType != currentBlock ||
-                                mask[n + k + h * chunkSize[u]].face != currentFace) {
+                                mask[n + k + h * chunkSize[u]].face != currentFace ||
+                                mask[n + k + h * chunkSize[u]].surface != currentSurface) {
                                 done = true;
                                 break;
                             }
@@ -467,7 +483,8 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
                     du[u] = w;
                     dv[v] = h;
 
-                    addGreedyQuad(meshData, x, du, dv, currentBlock, currentFace, atlas, w, h);
+                    addGreedyQuad(meshData, x, du, dv, currentBlock, currentFace, atlas, w, h,
+                                  currentSurface);
 
                     // Clear the mask for the quad we just added
                     for (int l = 0; l < h; ++l) {
@@ -486,7 +503,8 @@ void Chunk::greedyMeshAxis(MeshData& meshData, const TextureAtlas *atlas,
 }
 
 void Chunk::addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
-                          BlockType block, BlockFace face, const TextureAtlas *atlas, int width, int height) {
+                          BlockType block, BlockFace face, const TextureAtlas *atlas, int width, int height,
+                          bool surfaceWater) {
     // Calculate the four corners of the quad
     glm::u8vec3 v1(x[0], x[1], x[2]);
     glm::u8vec3 v2(x[0] + du[0], x[1] + du[1], x[2] + du[2]);
@@ -522,10 +540,19 @@ void Chunk::addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
         h = static_cast<uint8_t>(height);
     }
 
-    meshData.vertices.push_back({v1, tileIndex, c0, normalId, w, h});
-    meshData.vertices.push_back({v2, tileIndex, c1, normalId, w, h});
-    meshData.vertices.push_back({v3, tileIndex, c2, normalId, w, h});
-    meshData.vertices.push_back({v4, tileIndex, c3, normalId, w, h});
+    // Bit 7 of normalId asks the vertex shader to drop that corner to the water surface. The
+    // bottom face never moves, and a side quad is only ever one block tall here, so matching
+    // the quad's top Y picks exactly its upper edge.
+    const bool lower = surfaceWater && face != BlockFace::Bottom;
+    const uint8_t topY = std::max({v1.y, v2.y, v3.y, v4.y});
+    auto nid = [&](const glm::u8vec3& corner) -> uint8_t {
+        return normalId | (lower && corner.y == topY ? 0x80 : 0);
+    };
+
+    meshData.vertices.push_back({v1, tileIndex, c0, nid(v1), w, h});
+    meshData.vertices.push_back({v2, tileIndex, c1, nid(v2), w, h});
+    meshData.vertices.push_back({v3, tileIndex, c2, nid(v3), w, h});
+    meshData.vertices.push_back({v4, tileIndex, c3, nid(v4), w, h});
 
     // Add indices (two triangles)
     bool backFace = (static_cast<int>(face) % 2 == 1);

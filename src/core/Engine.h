@@ -9,6 +9,7 @@
 #include "src/world/DayCycle.h"
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <random>
 #include <unordered_map>
@@ -58,7 +59,8 @@ public:
     void setFpsLimit(int fps);
     int getFpsLimit() const { return fpsLimit; }
 
-    // Rebuilds the world from a fresh seed and drops the player back at spawn
+    // Rebuilds the world and drops the player back at spawn
+    void regenerateWorld(std::uint32_t seed);
     void regenerateWorld();
 
 private:

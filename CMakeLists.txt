@@ -112,6 +112,9 @@ if(EMSCRIPTEN)
             "-sEXIT_RUNTIME=0"
             "-sASSERTIONS=1"
 
+            # The raw exports take numbers only; the seed box hands the engine a string.
+            "-sEXPORTED_RUNTIME_METHODS=ccall"
+
             # Baked into a .data bundle. The runtime CWD is /, so the engine's relative
             # "assets/..." paths resolve unchanged.
             "--preload-file" "${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"

@@ -21,15 +21,18 @@
 
 #include "src/game/Player.h"
 
+class Engine;
+
 class ImGUIManager
 {
 public:
-    ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
-                 DayCycle& _dayCycle, int& _fpsLimit, ShadowMap& _shadowMap,
+    ImGUIManager(Engine& _engine, World& _world, Camera& _camera, int& _renderDistance,
+                 Player& _player, DayCycle& _dayCycle, int& _fpsLimit, ShadowMap& _shadowMap,
                  CloudRenderer& _cloudRenderer);
     ~ImGUIManager();
     void drawImGUIElements(float deltaTime);
 private:
+    Engine& engine;
     World& world;
     Camera& camera;
     Player& player;
@@ -41,8 +44,10 @@ private:
     bool wireframe = false;
     int& renderDistance;
     int& fpsLimit;
+    char seedInput[64] = "";
 
     std::string formatNumber(int number);
+    void drawWorldSettings();
     void drawShadowSettings();
     void drawCloudSettings();
     void drawTestScene();

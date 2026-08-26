@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 #include <queue>
 #include <chrono>
@@ -102,6 +103,7 @@ public:
 
     SeedType getSeed() const { return seed; }
     static SeedType randomSeed();
+    static SeedType seedFromString(const std::string& text);
     const Biome* getCurrentPlayerBiome(float cameraX, float cameraZ) const;
     bool hasTerrainAt(int worldX, int worldZ);
     RaycastResult raycastBlock(const glm::vec3& origin, const glm::vec3& direction, float maxDistance = 10.0f);

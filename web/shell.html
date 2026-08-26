@@ -206,10 +206,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	#new-world {
-		display: block;
-		width: 100%;
-		margin-top: 0.9rem;
+	#new-world, #seed-go {
 		appearance: none;
 		border: solid 1px var(--accent);
 		background: transparent;
@@ -221,8 +218,27 @@
 		cursor: pointer;
 		transition: background 0.15s, color 0.15s;
 	}
-	#new-world:hover { background: var(--accent); color: #0f1115; }
-	#panel.locked #new-world { opacity: 0.35; pointer-events: none; }
+	#new-world { display: block; width: 100%; margin-top: 0.5rem; }
+	#new-world:hover, #seed-go:hover { background: var(--accent); color: #0f1115; }
+
+	.seed-row { display: flex; gap: 0.4rem; margin-top: 0.9rem; }
+	#c-seed {
+		flex: 1;
+		min-width: 0;
+		appearance: none;
+		border: solid 1px rgba(255, 255, 255, 0.14);
+		border-radius: 0.3rem;
+		background: rgba(0, 0, 0, 0.25);
+		color: var(--text);
+		font: inherit;
+		font-size: 0.78rem;
+		padding: 0.45rem 0.5rem;
+	}
+	#c-seed:focus { outline: none; border-color: var(--accent); }
+	#c-seed::placeholder { color: var(--muted); }
+
+	#panel.locked #new-world,
+	#panel.locked .seed-row { opacity: 0.35; pointer-events: none; }
 
 	.sliders {
 		margin-top: 0.9rem;
@@ -303,6 +319,11 @@
 			<dt data-i18n="lSeed"></dt><dd id="s-seed">&ndash;</dd>
 		</dl>
 
+		<div class="seed-row">
+			<input type="text" id="c-seed" maxlength="63" spellcheck="false" autocomplete="off"/>
+			<button id="seed-go" type="button" data-i18n="generate"></button>
+		</div>
+
 		<button id="new-world" type="button" data-i18n="newWorld"></button>
 
 		<div class="sliders">
@@ -341,7 +362,8 @@
 			lChunks: "Chunks", lEntities: "Entities", lBiome: "Biome", lTime: "Time",
 			lPosition: "Position", lRenderDistance: "Render distance",
 			lTimeOfDay: "Time of day", lDayLength: "Day length",
-			lSeed: "Seed", newWorld: "New world  (R)",
+			lSeed: "Seed", newWorld: "Random world  (R)",
+			generate: "Go", seedPlaceholder: "seed, any text",
 			lockNote: "Press Esc to adjust these"
 		},
 		fr: {
@@ -358,7 +380,8 @@
 			lChunks: "Chunks", lEntities: "Entités", lBiome: "Biome", lTime: "Heure",
 			lPosition: "Position", lRenderDistance: "Distance d'affichage",
 			lTimeOfDay: "Heure du jour", lDayLength: "Durée du jour",
-			lSeed: "Seed", newWorld: "Nouveau monde  (R)",
+			lSeed: "Seed", newWorld: "Monde aléatoire  (R)",
+			generate: "Go", seedPlaceholder: "seed, texte libre",
 			lockNote: "Appuyez sur Échap pour les régler"
 		}
 	};
@@ -392,6 +415,31 @@
 		callEngine("_voxel_new_world");
 		// The seed changes immediately; let the next stats push report it.
 		this.blur();   // otherwise Space/Enter would re-trigger the button, not the game
+	});
+
+	// --- seed box -------------------------------------------------------------------
+
+	var seedBox = document.getElementById("c-seed");
+	seedBox.placeholder = t.seedPlaceholder;
+
+	function applySeed() {
+		if (window.Module && typeof Module.ccall === "function") {
+			Module.ccall("voxel_set_seed", null, ["string"], [seedBox.value]);
+		}
+		seedBox.blur();
+	}
+
+	document.getElementById("seed-go").addEventListener("click", applySeed);
+	seedBox.addEventListener("keydown", function (e) {
+		if (e.key === "Enter") applySeed();
+	});
+
+	// Emscripten's GLFW listens on window in the capture phase, so without this the game
+	// would read every keystroke aimed at the box
+	["keydown", "keypress"].forEach(function (type) {
+		window.addEventListener(type, function (e) {
+			if (document.activeElement === seedBox) e.stopImmediatePropagation();
+		}, true);
 	});
 
 	var slider = {

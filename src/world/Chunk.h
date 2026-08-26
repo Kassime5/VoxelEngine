@@ -133,7 +133,7 @@ private:
 
     void addGreedyQuad(MeshData& meshData, int x[3], int du[3], int dv[3],
                           BlockType block, BlockFace face, const TextureAtlas *atlas,
-                          int width, int height);
+                          int width, int height, bool surfaceWater);
 
     void addCrossModel(MeshData& meshData, const glm::vec3& pos, BlockType blockType,
                   const TextureAtlas* atlas);

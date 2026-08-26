@@ -6,16 +6,17 @@
 //
 
 #include "ImGUIManager.h"
+#include "src/core/Engine.h"
 #include "src/core/GL.h"
 
 #include "src/game/Player.h"
 #include "src/input/InputManager.h"
 
 
-ImGUIManager::ImGUIManager(World& _world, Camera& _camera, int& _renderDistance, Player& _player,
-                           DayCycle& _dayCycle, int& _fpsLimit, ShadowMap& _shadowMap,
-                           CloudRenderer& _cloudRenderer) :
-    world(_world), camera(_camera),
+ImGUIManager::ImGUIManager(Engine& _engine, World& _world, Camera& _camera, int& _renderDistance,
+                           Player& _player, DayCycle& _dayCycle, int& _fpsLimit,
+                           ShadowMap& _shadowMap, CloudRenderer& _cloudRenderer) :
+    engine(_engine), world(_world), camera(_camera),
     player(_player), entityManager(*_world.getEntityManager()),
     dayCycle(_dayCycle),
     shadowMap(_shadowMap),
@@ -64,8 +65,7 @@ void ImGUIManager::drawImGUIElements(float deltaTime) {
     ImGui::Text("Total Loaded: %d", world.getLoadedChunkCount());
 
     // More world stuff
-    ImGui::SeparatorText("World");
-    ImGui::Text("Entity count: %d", entityManager.getEntityCount());
+    drawWorldSettings();
 
     // Sky
     ImGui::SeparatorText("Sky");
@@ -122,6 +122,26 @@ void ImGUIManager::drawImGUIElements(float deltaTime) {
     ImGui::End();
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void ImGUIManager::drawWorldSettings() {
+    ImGui::SeparatorText("World");
+    ImGui::Text("Entity count: %d", entityManager.getEntityCount());
+    ImGui::Text("Seed: %u", static_cast<unsigned int>(world.getSeed()));
+
+    ImGui::SetNextItemWidth(160.0f);
+    const bool submitted = ImGui::InputTextWithHint("##seed", "text or number", seedInput,
+                                                    IM_ARRAYSIZE(seedInput),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();
+    if (ImGui::Button("Generate") || submitted) {
+        engine.regenerateWorld(World::seedFromString(seedInput));
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Random")) {
+        seedInput[0] = '\0';
+        engine.regenerateWorld(World::randomSeed());
+    }
 }
 
 void ImGUIManager::drawShadowSettings() {

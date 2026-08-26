@@ -25,6 +25,10 @@ const vec2 CORNER_UVS[4] = vec2[4](
     vec2(0.0, 1.0)
 );
 
+// WATER_SURFACE_DROP. Bit 7 of normalId marks the corners the mesher wants pulled
+// down to it, so an exposed water block reads as a body of water rather than a solid cube.
+const float WATER_SURFACE_DROP = 0.125;
+
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in uint tileIndex;
 layout (location = 2) in uint cornerIndex;
@@ -46,7 +50,10 @@ uniform mat4 projection;
 
 void main()
 {
+    uint nid = normalId & 7u;
+
     vec3 worldPos = aPos + chunkOffset;
+    worldPos.y -= float(normalId >> 7u) * WATER_SURFACE_DROP;
     gl_Position = projection * view * vec4(worldPos, 1.0);
 
     // Local UVs scaled by quad dimensions; the sampler's GL_REPEAT tiles them
@@ -57,6 +64,6 @@ void main()
     TileIndex = tileIndex;
 
     FragPos = worldPos;
-    Normal = NORMALS[normalId];
-    FaceShade = FACE_SHADE[normalId];
+    Normal = NORMALS[nid];
+    FaceShade = FACE_SHADE[nid];
 }

@@ -29,6 +29,9 @@ enum class BlockRenderType : uint8_t {
     Transparent
 };
 
+// How far below the block ceiling the water block sits
+constexpr float WATER_SURFACE_DROP = 0.125f;
+
 
 inline BlockRenderType getBlockRenderType(BlockType type) {
     switch (type) {
