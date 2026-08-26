@@ -1,4 +1,4 @@
-# GLFW Voxel Engine
+# Voxel Engine
 
 A voxel engine written from scratch in C++20 and OpenGL — chunked world streaming,
 procedural terrain, greedy meshing, frustum culling, a day/night cycle and 3D positional
@@ -8,7 +8,7 @@ In the spirit of Minecraft and Cube World, built to learn how OpenGL and overall
 
 ![The engine running](docs/screenshot.png)
 
-### [Play it in your browser](https://kassime5.github.io/GLFW-Voxel-Game/)
+### [Play it in your browser](https://kassime5.github.io/VoxelEngine/)
 
 ---
 
