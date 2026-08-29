@@ -104,6 +104,10 @@ public:
     void setBlock(int x, int y, int z, BlockType type);
 
     int getTerrainHeight(int localX, int localZ) const;
+
+    // Vertical span holding non-water blocks, so a random tick can skip the empty sky
+    int getSolidMinY() const { return solidMinY; }
+    int getSolidMaxY() const { return solidMaxY; }
 private:
     glm::ivec3 chunkPosition;
     BlockType chunkBlocks[SIZE][HEIGHT][SIZE];

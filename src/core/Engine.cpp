@@ -213,12 +213,15 @@ bool Engine::initialize(unsigned int width, unsigned int height, const char* tit
     world = std::make_unique<World>(*player, chunkRenderer->getTextureAtlas());
     world->setRenderDistance(renderDistance);
 
-    world->setBlockChangeCallback([this](const glm::ivec3& pos, BlockType from, BlockType to) {
-        // Simple way to check if it's destroyed or placed
-        if (to == BlockType::Air) {
-            playBlockSound(breakSounds, from, pos);
-        } else {
-            playBlockSound(placeSounds, to, pos);
+    world->setBlockChangeCallback([this](const glm::ivec3& pos, BlockType from, BlockType to, BlockChangeSource source) {
+        // Only the player's own edits are audible
+        if (source == BlockChangeSource::Player) {
+            // Simple way to check if it's destroyed or placed
+            if (to == BlockType::Air) {
+                playBlockSound(breakSounds, from, pos);
+            } else {
+                playBlockSound(placeSounds, to, pos);
+            }
         }
     });
 
@@ -274,7 +277,7 @@ void Engine::step() {
 #endif
     player->update(deltaTime, *world);
     playerController->processInput(deltaTime);
-    world->update(player->getPosition());
+    world->update(deltaTime, player->getPosition());
 
     EntityManager* entityManager = world->getEntityManager();
     entityManager->update(deltaTime, world.get());

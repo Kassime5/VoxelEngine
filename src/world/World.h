@@ -15,6 +15,9 @@
 #include <string>
 #include <vector>
 #include <queue>
+#include <deque>
+#include <random>
+#include <unordered_set>
 #include <chrono>
 #include <climits>
 #include <thread>
@@ -50,6 +53,12 @@ struct ChunkMeshTask {
     bool playerEdit = false;
 };
 
+// Who asked for a block change
+enum class BlockChangeSource : std::uint8_t {
+    Player,
+    WorldUpdate
+};
+
 struct RaycastResult {
     bool hit;
     glm::vec3 hitPos;
@@ -65,15 +74,16 @@ public:
     World(Player& _player, const TextureAtlas& _textureAtlas);
     ~World();
 
-    void update(const glm::vec3& cameraPosition);
+    void update(float deltaTime, const glm::vec3& cameraPosition);
 
     const ChunkMap& getChunks() const { return m_chunks; }
 
     BlockType getBlock(int worldX, int worldY, int worldZ);
     void setBlock(int worldX, int worldY, int worldZ, BlockType type);
+    void setBlockLogic(const glm::ivec3& pos, BlockType type);
 
-    // fires when setBlock is actually committed
-    using BlockChangeCallback = std::function<void(const glm::ivec3& pos, BlockType from, BlockType to)>;
+    // fires when a block change is actually committed
+    using BlockChangeCallback = std::function<void(const glm::ivec3& pos, BlockType from, BlockType to, BlockChangeSource source)>;
     void setBlockChangeCallback(BlockChangeCallback callback) { onBlockChange = std::move(callback); }
 
     Chunk* getChunk(const glm::ivec3& chunkPos);
@@ -173,6 +183,28 @@ private:
     void queueRemesh(std::shared_ptr<Chunk> chunk, bool playerEdit);
     void collectStaleNeighbours(const glm::ivec3& chunkPos,
                                 std::vector<std::shared_ptr<Chunk>>& out);
+
+    void applyBlockChange(const glm::ivec3& pos, BlockType type, BlockChangeSource source);
+    bool isSpaceOccupied(const glm::ivec3& pos) const;
+    void queueSeamRemesh(const glm::ivec3& chunkPos, const glm::ivec3& localPos);
+
+    // Block updates. Main thread only, same as the remesh queues they feed.
+    struct PendingBlockUpdate {
+        glm::ivec3 pos;
+        std::uint8_t depth;
+    };
+
+    std::deque<PendingBlockUpdate> blockUpdateQueue;
+    std::unordered_set<glm::ivec3, IVec3Hash> blockUpdateQueued;
+    float blockTickAccumulator = 0.0f;
+    // Depth of the update being processed, so edits a rule makes inherit it
+    int currentUpdateDepth = 0;
+    std::mt19937 blockTickRng{std::random_device{}()};
+
+    void scheduleBlockUpdate(const glm::ivec3& pos, int depth);
+    void scheduleNeighbourUpdates(const glm::ivec3& pos);
+    void tickBlockUpdates();
+    void runRandomTicks(const glm::ivec3& centerChunkPos);
 
     EntityManager entityManager;
 

@@ -3,6 +3,7 @@
 //
 
 #include "World.h"
+#include "BlockBehaviour.h"
 #include "src/debug/TestScene.h"
 #include "src/game/Player.h"
 
@@ -20,6 +21,15 @@ namespace {
     constexpr std::chrono::microseconds GPU_UPLOAD_BUDGET{2000};
     constexpr int GPU_UPLOAD_MIN_PER_FRAME = 2;
     constexpr int GPU_UPLOAD_MAX_ATTEMPTS = 64;
+
+    // TODO tweak params
+    constexpr float BLOCK_TICK_INTERVAL = 0.05f;
+    constexpr int BLOCK_TICKS_PER_FRAME_MAX = 4;
+    constexpr int BLOCK_UPDATES_PER_TICK = 256;
+    constexpr int BLOCK_UPDATE_MAX_DEPTH = 8;
+    constexpr int RANDOM_TICKS_PER_CHUNK = 8;
+    // TODO param to change it just like render distance
+    constexpr int RANDOM_TICK_CHUNK_RADIUS = 4;
 }
 
 World::SeedType World::randomSeed() {
@@ -77,6 +87,10 @@ void World::regenerate(SeedType newSeed) {
     }
     chunkGraveyard.clear();
     entityManager.clear();
+
+    blockUpdateQueue.clear();
+    blockUpdateQueued.clear();
+    blockTickAccumulator = 0.0f;
 
     seed = newSeed;
     perlinNoise.reseed(seed);
@@ -389,21 +403,39 @@ void World::processGPUUploadQueue(std::chrono::microseconds budget) {
     }
 }
 
-void World::update(const glm::vec3& cameraPosition) {
+void World::update(float deltaTime, const glm::vec3& cameraPosition) {
     PROFILE_FUNCTION();
+
+    const glm::ivec3 currentChunkPos = worldToChunkPos(
+        static_cast<int>(std::floor(cameraPosition.x)),
+        static_cast<int>(std::floor(cameraPosition.y)),
+        static_cast<int>(std::floor(cameraPosition.z))
+    );
 
     {
         PROFILE_SCOPE("World::update - chunk loading");
-        glm::ivec3 currentChunkPos = worldToChunkPos(
-            static_cast<int>(std::floor(cameraPosition.x)),
-            static_cast<int>(std::floor(cameraPosition.y)),
-            static_cast<int>(std::floor(cameraPosition.z))
-        );
-
         if (currentChunkPos != lastCameraChunkPos) {
             loadChunksAroundPosition(currentChunkPos);
             unloadDistantChunks(currentChunkPos);
             lastCameraChunkPos = currentChunkPos;
+        }
+    }
+
+    {
+        PROFILE_SCOPE("World::update - block ticks");
+        blockTickAccumulator += deltaTime;
+
+        int ticks = 0;
+        while (blockTickAccumulator >= BLOCK_TICK_INTERVAL && ticks < BLOCK_TICKS_PER_FRAME_MAX) {
+            blockTickAccumulator -= BLOCK_TICK_INTERVAL;
+            tickBlockUpdates();
+            runRandomTicks(currentChunkPos);
+            ticks++;
+        }
+
+        // A long stall is dropped rather than paid back tick by tick
+        if (ticks == BLOCK_TICKS_PER_FRAME_MAX) {
+            blockTickAccumulator = 0.0f;
         }
     }
 
@@ -444,42 +476,51 @@ BlockType World::getBlock(int worldX, int worldY, int worldZ) {
 }
 
 void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
-    glm::ivec3 chunkPos = worldToChunkPos(worldX, worldY, worldZ);
+    const glm::ivec3 pos(worldX, worldY, worldZ);
+    if (type != BlockType::Air && isSpaceOccupied(pos)) {
+        return;
+    }
+    applyBlockChange(pos, type, BlockChangeSource::Player);
+}
 
+void World::setBlockLogic(const glm::ivec3& pos, BlockType type) {
+    applyBlockChange(pos, type, BlockChangeSource::WorldUpdate);
+}
+
+void World::applyBlockChange(const glm::ivec3& pos, BlockType type, BlockChangeSource source) {
+    const glm::ivec3 chunkPos = worldToChunkPos(pos.x, pos.y, pos.z);
     std::shared_ptr<Chunk> chunk = getChunkShared(chunkPos);
     if (!chunk) return;
 
-    // Only check occupation when placing blocks
-    if (type != BlockType::Air) {
-        AABB blockBox{
-            glm::vec3(worldX, worldY, worldZ),
-            glm::vec3(worldX + 1, worldY + 1, worldZ + 1)
-        };
-
-        if (player.getBoundingBox().intersects(blockBox)) {
-            return;
-        }
-
-        std::vector<Entity*> entitiesInChunk = entityManager.getEntitiesInChunk(chunkPos);
-        for (Entity* entity : entitiesInChunk) {
-            if (entity->getBoundingBox().intersects(blockBox)) {
-                return;
-            }
-        }
-    }
-
-    glm::ivec3 localPos = worldToLocalPos(worldX, worldY, worldZ);
+    const glm::ivec3 localPos = worldToLocalPos(pos.x, pos.y, pos.z);
     const BlockType previous = chunk->getBlock(localPos.x, localPos.y, localPos.z);
+    if (previous == type) return;
+
     chunk->setBlock(localPos.x, localPos.y, localPos.z, type);
 
-    if (onBlockChange && previous != type) {
-        onBlockChange(glm::ivec3(worldX, worldY, worldZ), previous, type);
-    }
+    onBlockChange(pos, previous, type, source);
 
     queueRemesh(chunk, true);
+    queueSeamRemesh(chunkPos, localPos);
+    scheduleNeighbourUpdates(pos);
+}
 
-    // An edit on a seam changes what the neighbour should draw there, so its mesh is stale
-    // too. A corner block touches two of them.
+bool World::isSpaceOccupied(const glm::ivec3& pos) const {
+    const AABB blockBox{glm::vec3(pos), glm::vec3(pos) + glm::vec3(1.0f)};
+
+    if (player.getBoundingBox().intersects(blockBox)) {
+        return true;
+    }
+    for (Entity* entity : entityManager.getEntitiesInChunk(worldToChunkPos(pos.x, pos.y, pos.z))) {
+        if (entity->getBoundingBox().intersects(blockBox)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// An edit on a seam changes what the neighbour should draw there. A corner touches two.
+void World::queueSeamRemesh(const glm::ivec3& chunkPos, const glm::ivec3& localPos) {
     if (localPos.x == 0) {
         queueRemesh(getChunkShared(chunkPos + glm::ivec3(-1, 0, 0)), true);
     } else if (localPos.x == Chunk::SIZE - 1) {
@@ -491,6 +532,98 @@ void World::setBlock(int worldX, int worldY, int worldZ, BlockType type) {
         queueRemesh(getChunkShared(chunkPos + glm::ivec3(0, 0, 1)), true);
     }
 }
+
+void World::scheduleBlockUpdate(const glm::ivec3& pos, int depth) {
+    if (pos.y < 0 || pos.y >= Chunk::HEIGHT || depth > BLOCK_UPDATE_MAX_DEPTH) {
+        return;
+    }
+    if (!blockUpdateQueued.insert(pos).second) {
+        return;
+    }
+    blockUpdateQueue.push_back(PendingBlockUpdate{pos, static_cast<std::uint8_t>(depth)});
+}
+
+// The six blocks touching pos get a chance to react to it having changed
+void World::scheduleNeighbourUpdates(const glm::ivec3& pos) {
+    const glm::ivec3 offsets[6] = {
+        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}
+    };
+
+    for (const glm::ivec3& offset : offsets) {
+        scheduleBlockUpdate(pos + offset, currentUpdateDepth + 1);
+    }
+}
+
+void World::tickBlockUpdates() {
+    PROFILE_SCOPE("World::tickBlockUpdates");
+
+    // Whatever the budget leaves behind waits for the next tick, not the next frame
+    for (int i = 0; i < BLOCK_UPDATES_PER_TICK && !blockUpdateQueue.empty(); i++) {
+        const PendingBlockUpdate update = blockUpdateQueue.front();
+        blockUpdateQueue.pop_front();
+        blockUpdateQueued.erase(update.pos);
+
+        // A chunk unloaded since scheduling reads as Air, which has no behaviour
+        const BlockType type = getBlock(update.pos.x, update.pos.y, update.pos.z);
+        const BlockUpdateFn onNeighbourChanged = blockBehaviour(type).onNeighbourChanged;
+        if (!onNeighbourChanged) {
+            continue;
+        }
+
+        currentUpdateDepth = update.depth;
+        onNeighbourChanged(*this, update.pos);
+    }
+
+    currentUpdateDepth = 0;
+}
+
+void World::runRandomTicks(const glm::ivec3& centerChunkPos) {
+    PROFILE_SCOPE("World::runRandomTicks");
+
+    // Pinned first: the rules below reach setBlockLogic, which takes this same lock
+    std::vector<std::shared_ptr<Chunk>> candidates;
+    {
+        std::shared_lock lock(chunksMutex);
+        for (const auto& [chunkPos, chunk] : m_chunks) {
+            const glm::ivec3 offset = chunkPos - centerChunkPos;
+            if (std::abs(offset.x) > RANDOM_TICK_CHUNK_RADIUS || std::abs(offset.z) > RANDOM_TICK_CHUNK_RADIUS) {
+                continue;
+            }
+            if (chunk->getState() != ChunkState::Ready) {
+                continue;
+            }
+            candidates.push_back(chunk);
+        }
+    }
+
+    for (const std::shared_ptr<Chunk>& chunk : candidates) {
+        const int minY = chunk->getSolidMinY();
+        const int maxY = chunk->getSolidMaxY();
+        if (maxY < minY) {
+            continue;
+        }
+
+        const glm::ivec3 origin = chunk->getPosition() * glm::ivec3(Chunk::SIZE, 1, Chunk::SIZE);
+
+        // A random column rather than a random voxel
+        for (int i = 0; i < RANDOM_TICKS_PER_CHUNK; i++) {
+            const int x = static_cast<int>(blockTickRng() % Chunk::SIZE);
+            const int z = static_cast<int>(blockTickRng() % Chunk::SIZE);
+
+            for (int y = maxY; y >= minY; y--) {
+                const BlockType type = chunk->getBlock(x, y, z);
+                if (type == BlockType::Air || type == BlockType::TallGrass) {
+                    continue;
+                }
+                if (const BlockUpdateFn onRandomTick = blockBehaviour(type).onRandomTick) {
+                    onRandomTick(*this, origin + glm::ivec3(x, y, z));
+                }
+                break;
+            }
+        }
+    }
+}
+
 Chunk* World::getChunk(const glm::ivec3& chunkPos) {
     std::shared_lock lock(chunksMutex);
     auto it = m_chunks.find(chunkPos);

@@ -65,10 +65,6 @@ public:
     // returns the view matrix calculated using Euler Angles and the LookAt Matrix
     glm::mat4 GetViewMatrix() { return glm::lookAt(Position, Position + Front, Up); }
 
-    glm::mat4 GetProjectionMatrix(float aspectRatio = 2.1111f, float nearPlane = 0.1f, float farPlane = 1000.0f) {
-        return glm::perspective(glm::radians(Zoom), aspectRatio, nearPlane, farPlane);
-    }
-
     // processes input received from a mouse input system. Expects the offset value in both the x and y direction.
     void ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch = true);
 
