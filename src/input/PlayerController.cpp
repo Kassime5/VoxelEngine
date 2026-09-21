@@ -128,6 +128,8 @@ void PlayerController::processInteractionInput() {
 void PlayerController::processUIInput() {
     InputManager& input = InputManager::getInstance();
 
+#ifndef __EMSCRIPTEN__
+    // On the web the browser's pointer lock drives this instead, see InputManager::onPointerLockChanged.
     // Toggle pause/menu (works in any context)
     if (input.isActionPressed(GameAction::TogglePause)) {
         if (input.getCurrentContext() == InputContext::Gameplay) {
@@ -136,6 +138,7 @@ void PlayerController::processUIInput() {
             input.popContext();
         }
     }
+#endif
 
     // Toggle inventory
     if (input.isActionPressed(GameAction::ToggleInventory)) {

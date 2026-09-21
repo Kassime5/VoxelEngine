@@ -140,6 +140,9 @@ public:
     void toggleCursor();
     void resetMouseDelta();
 
+    // Drops every held key and button, for when the page loses focus mid-press
+    void releaseAllInputs();
+
     // Mirrors a pointer-lock change the browser made on its own
     void onPointerLockChanged(bool locked);
 

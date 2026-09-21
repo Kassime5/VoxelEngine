@@ -6,11 +6,93 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/html5.h>
+#include <cstring>
 
 namespace
 {
     EM_BOOL pointerLockChanged(int, const EmscriptenPointerlockChangeEvent* event, void* userData) {
         static_cast<InputManager*>(userData)->onPointerLockChanged(event->isActive != 0);
+        return EM_FALSE;
+    }
+
+    struct CodeMapping {
+        const char* code;
+        int key;
+    };
+
+    // Everything the prefix rules below do not cover. Letters, digits, function and keypad
+    // keys are derived instead of listed.
+    constexpr CodeMapping codeMappings[] = {
+        {"Space", GLFW_KEY_SPACE}, {"Escape", GLFW_KEY_ESCAPE}, {"Enter", GLFW_KEY_ENTER},
+        {"Tab", GLFW_KEY_TAB}, {"Backspace", GLFW_KEY_BACKSPACE}, {"Delete", GLFW_KEY_DELETE},
+        {"Insert", GLFW_KEY_INSERT}, {"Home", GLFW_KEY_HOME}, {"End", GLFW_KEY_END},
+        {"PageUp", GLFW_KEY_PAGE_UP}, {"PageDown", GLFW_KEY_PAGE_DOWN},
+        {"ArrowUp", GLFW_KEY_UP}, {"ArrowDown", GLFW_KEY_DOWN},
+        {"ArrowLeft", GLFW_KEY_LEFT}, {"ArrowRight", GLFW_KEY_RIGHT},
+        {"ShiftLeft", GLFW_KEY_LEFT_SHIFT}, {"ShiftRight", GLFW_KEY_RIGHT_SHIFT},
+        {"ControlLeft", GLFW_KEY_LEFT_CONTROL}, {"ControlRight", GLFW_KEY_RIGHT_CONTROL},
+        {"AltLeft", GLFW_KEY_LEFT_ALT}, {"AltRight", GLFW_KEY_RIGHT_ALT},
+        {"MetaLeft", GLFW_KEY_LEFT_SUPER}, {"MetaRight", GLFW_KEY_RIGHT_SUPER},
+        {"CapsLock", GLFW_KEY_CAPS_LOCK}, {"Minus", GLFW_KEY_MINUS}, {"Equal", GLFW_KEY_EQUAL},
+        {"BracketLeft", GLFW_KEY_LEFT_BRACKET}, {"BracketRight", GLFW_KEY_RIGHT_BRACKET},
+        {"Backslash", GLFW_KEY_BACKSLASH}, {"Semicolon", GLFW_KEY_SEMICOLON},
+        {"Quote", GLFW_KEY_APOSTROPHE}, {"Backquote", GLFW_KEY_GRAVE_ACCENT},
+        {"IntlBackslash", GLFW_KEY_WORLD_1}, {"Comma", GLFW_KEY_COMMA},
+        {"Period", GLFW_KEY_PERIOD}, {"Slash", GLFW_KEY_SLASH},
+        {"NumpadEnter", GLFW_KEY_KP_ENTER}, {"NumpadAdd", GLFW_KEY_KP_ADD},
+        {"NumpadSubtract", GLFW_KEY_KP_SUBTRACT}, {"NumpadMultiply", GLFW_KEY_KP_MULTIPLY},
+        {"NumpadDivide", GLFW_KEY_KP_DIVIDE}, {"NumpadDecimal", GLFW_KEY_KP_DECIMAL},
+    };
+
+    // "KeyW" is the physical key GLFW calls GLFW_KEY_W on the desktop, whatever it prints.
+    int codeToGlfwKey(const char* code) {
+        const size_t length = strlen(code);
+
+        if (length == 4 && strncmp(code, "Key", 3) == 0 && code[3] >= 'A' && code[3] <= 'Z')
+            return GLFW_KEY_A + (code[3] - 'A');
+
+        if (length == 6 && strncmp(code, "Digit", 5) == 0 && code[5] >= '0' && code[5] <= '9')
+            return GLFW_KEY_0 + (code[5] - '0');
+
+        if (length == 7 && strncmp(code, "Numpad", 6) == 0 && code[6] >= '0' && code[6] <= '9')
+            return GLFW_KEY_KP_0 + (code[6] - '0');
+
+        if (code[0] == 'F' && (length == 2 || length == 3)) {
+            int number = 0;
+            for (size_t i = 1; i < length; ++i) {
+                if (code[i] < '0' || code[i] > '9') return GLFW_KEY_UNKNOWN;
+                number = number * 10 + (code[i] - '0');
+            }
+            if (number >= 1 && number <= 25) return GLFW_KEY_F1 + number - 1;
+        }
+
+        for (const CodeMapping& mapping : codeMappings) {
+            if (strcmp(code, mapping.code) == 0) return mapping.key;
+        }
+
+        return GLFW_KEY_UNKNOWN;
+    }
+
+    EM_BOOL webKeyChanged(int eventType, const EmscriptenKeyboardEvent* event, void* userData) {
+        if (event->repeat) return EM_FALSE; // the engine only tracks press and release
+
+        const int key = codeToGlfwKey(event->code);
+        if (key == GLFW_KEY_UNKNOWN) return EM_FALSE;
+
+        int mods = 0;
+        if (event->shiftKey) mods |= GLFW_MOD_SHIFT;
+        if (event->ctrlKey) mods |= GLFW_MOD_CONTROL;
+        if (event->altKey) mods |= GLFW_MOD_ALT;
+        if (event->metaKey) mods |= GLFW_MOD_SUPER;
+
+        const int action = eventType == EMSCRIPTEN_EVENT_KEYDOWN ? GLFW_PRESS : GLFW_RELEASE;
+        static_cast<InputManager*>(userData)->onKeyCallback(key, 0, action, mods);
+        return EM_FALSE;
+    }
+
+    EM_BOOL windowBlurred(int, const EmscriptenFocusEvent*, void* userData) {
+        // No keyup reaches the page for a key still down when focus leaves it.
+        static_cast<InputManager*>(userData)->releaseAllInputs();
         return EM_FALSE;
     }
 }
@@ -28,9 +110,15 @@ void InputManager::initialize(GLFWwindow* _window) {
 #ifdef __EMSCRIPTEN__
     // Pointer lock is done on the browser, without this the engine keeps believing the mouse is captured after Escape frees it.
     emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, this, EM_FALSE, pointerLockChanged);
+
+    // Emscripten's GLFW derives its key tokens from the browser's layout-dependent keyCode
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_TRUE, webKeyChanged);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_TRUE, webKeyChanged);
+    emscripten_set_blur_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, EM_FALSE, windowBlurred);
+#else
+    glfwSetKeyCallback(window, inputKeyCallback);
 #endif
 
-    glfwSetKeyCallback(window, inputKeyCallback);
     glfwSetMouseButtonCallback(window, inputMouseButtonCallback);
     glfwSetCursorPosCallback(window, inputCursorPosCallback);
     glfwSetScrollCallback(window, inputScrollCallback);
@@ -230,14 +318,16 @@ void InputManager::toggleCursor() {
 }
 
 void InputManager::onPointerLockChanged(bool locked) {
-    // Only the flag is mirrored. Calling glfwSetInputMode here would ask the browser to
-    // undo what it just did; GLFW's own cursor mode is left alone, which is what lets a
-    // later click on the canvas re-acquire the lock.
     cursorVisible = !locked;
 
-    // The virtual cursor GLFW accumulates while locked sits nowhere near the real pointer,
-    // so the first sample after a transition would otherwise be one enormous delta and
-    // whip the camera around.
+    // The browser swallows the Escape that drops the lock, so the lock drives the context.
+    if (locked) {
+        contextStack.resize(1); // back to the base Gameplay context
+    }
+    else if (getCurrentContext() == InputContext::Gameplay) {
+        contextStack.push_back(InputContext::UI);
+    }
+
     resetMouseDelta();
 }
 
@@ -249,6 +339,18 @@ void InputManager::setUICapture(bool mouse, bool keyboard) {
 void InputManager::resetMouseDelta() {
     firstMouse = true;
     mouseDelta = glm::vec2(0.0f);
+}
+
+void InputManager::releaseAllInputs() {
+    for (auto& pair : keyStates) {
+        if (pair.second == InputState::Held || pair.second == InputState::JustPressed)
+            pair.second = InputState::JustReleased;
+    }
+
+    for (auto& pair : mouseButtonStates) {
+        if (pair.second == InputState::Held || pair.second == InputState::JustPressed)
+            pair.second = InputState::JustReleased;
+    }
 }
 
 void InputManager::onKeyCallback(int key, int scancode, int action, int mods) {
